@@ -111,10 +111,16 @@ TIME RANGE RULES — the person's time range always wins over your own idea of t
 - For every item, include "from" and "to" years (numbers): release year for songs, films, books, inventions (from = to); first and last active year for people, teams, and bands. Use null only for timeless things.
 Ignore words in the topic like "top", "best", "greatest" or a number; treat the topic as the subject only. Mr. Paul never picks a #1. Instead, research what shows up most often across published rankings and lists for this topic (use web search), and return exactly ${size} items (or fewer if the topic truly has fewer) as type "list".
 - "title": "Ranking Research: <topic>" — add the time range in parentheses unless it's all time or doesn't apply
-- "answer": "What shows up most across published rankings, listed A–Z. Mr. Paul doesn't pick a #1."
-- "items": [{"name": "...", "reason": "...", "from": 1999, "to": 2005}] in A–Z order; each "reason" is ONE short line (about 12 words max) saying why it keeps making the lists. No numbers, no "#1", no superlatives in your own voice.
+- "order": "alpha" or "chronological". Default is "alpha". Use "chronological" only when time order makes the list more useful: the topic is about history or change over time (inventions, discoveries, events, milestones, presidents, eras, "history of" or "evolution of" topics, generations of a technology) AND nearly every item has a clear year. Opinion topics like songs, albums, films, beaches, foods or places stay "alpha" even though they have years.
+- "answer": for alpha: "What shows up most across published rankings, listed A–Z. Mr. Paul doesn't pick a #1." For chronological: "What shows up most across published rankings, listed in time order, oldest first. Mr. Paul doesn't pick a #1."
+- "items": [{"name": "...", "reason": "...", "from": 1999, "to": 2005}] in A–Z order (or oldest first for chronological); each "reason" is ONE short line (about 12 words max) saying why it keeps making the lists. No numbers, no "#1", no superlatives in your own voice.
 - "facts": 1 or 2 short notes on what kinds of sources were looked at (no links).
-- Companies, brands, products, and businesses are NOT allowed as a list topic (rule 2). If the topic is one, return type "redirect" and suggest a knowledge topic instead.`;
+- Companies, brands, products, and businesses are NOT allowed as a list topic (rule 2). If the topic is one, return type "redirect" and suggest a knowledge topic instead.
+
+INFOGRAPHIC SAFETY (copyright screen) — people may turn this list into a picture with an AI image tool, so also return:
+- "art": "blocked" if the topic is mainly about copyrighted or trademarked characters or designs: cartoon, comic, anime, movie, TV, toy or video game characters, mascots, logos, or cover art. Otherwise "ok".
+- For every item add "visual": a short description (about 10 words) of an ORIGINAL, GENERIC picture for that tile. Never describe a logo, brand mark, sponsor decal, team colors, character, real person's face, or a specific album, book, movie or game cover. For real people, describe a symbolic object tied to their work, not their face. For creative works (songs, albums, films, books), describe a generic symbol of the theme or genre. For vehicles and products, describe a generic style with no logos, text or numbers.
+- Item shape: {"name": "...", "reason": "...", "from": 1999, "to": 2005, "visual": "..."}`;
 }
 
 // ---------- helpers ----------
@@ -246,14 +252,14 @@ function salvage(text) {
     facts = done(after.split("]")[0] + (after.includes("]") ? "]" : ""));
   }
   const items = [];
-  const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"from"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"to"\s*:\s*(null|-?\d+)\s*)?\}/g;
+  const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"from"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"to"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"visual"\s*:\s*"((?:[^"\\]|\\.)*)"\s*)?\}/g;
   let im;
-  while ((im = itemRe.exec(text))) items.push({ name: unescapeJson(im[1]), reason: unescapeJson(im[2]), from: im[3] && im[3] !== "null" ? +im[3] : null, to: im[4] && im[4] !== "null" ? +im[4] : null });
+  while ((im = itemRe.exec(text))) items.push({ name: unescapeJson(im[1]), reason: unescapeJson(im[2]), from: im[3] && im[3] !== "null" ? +im[3] : null, to: im[4] && im[4] !== "null" ? +im[4] : null, visual: im[5] ? unescapeJson(im[5]) : "" });
   if (!answer && !items.length) {
     const plain = text.replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").trim();
     return { type: "answer", title: "Here's your answer", answer: plain, facts: [], items: [], explore: "", partial: true };
   }
-  return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, facts, items, explore: str("explore"), partial: true };
+  return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, facts, items, art: str("art"), order: str("order"), explore: str("explore"), partial: true };
 }
 
 function parseCard(text) {
@@ -274,10 +280,21 @@ function parseCard(text) {
         name: String(i.name), reason: String(i.reason || ""),
         from: Number.isFinite(+i.from) && i.from !== null ? +i.from : null,
         to: Number.isFinite(+i.to) && i.to !== null ? +i.to : null,
+        visual: String(i.visual || "").slice(0, 160),
       }))
     : [];
-  // Enforce the no-ranking rule: lists are always A–Z
-  card.items.sort((a, b) => sortKey(a.name).localeCompare(sortKey(b.name)));
+  card.art = card.art === "blocked" ? "blocked" : "ok";
+  // Enforce the no-ranking rule: lists are A–Z, or oldest-first when the topic is about time
+  const dated = card.items.filter((i) => i.from !== null || i.to !== null).length;
+  card.order = card.order === "chronological" && card.items.length && dated >= card.items.length * 0.8 ? "chronological" : "alpha";
+  if (card.order === "chronological") {
+    const yr = (i) => (i.from ?? i.to ?? 99999);
+    card.items.sort((a, b) => yr(a) - yr(b) || sortKey(a.name).localeCompare(sortKey(b.name)));
+    card.answer = card.answer.replace(/listed A[–-]Z/g, "listed in time order, oldest first");
+  } else {
+    card.items.sort((a, b) => sortKey(a.name).localeCompare(sortKey(b.name)));
+    card.answer = card.answer.replace(/listed in time order, oldest first/g, "listed A–Z");
+  }
   card.explore = EXPERIENCES.includes(card.explore) ? card.explore : "";
   card.alternatives = Array.isArray(card.alternatives)
     ? card.alternatives.map((x) => String(x).trim()).filter((x) => x.length > 2).slice(0, 3)
@@ -315,7 +332,7 @@ export default async function handler(req, res) {
   const followup = String(body.followup || "").trim().slice(0, 300);
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
-    ? `amp:cache:v3:rank:${size}:${normalize(range)}:${normalize(q)}`
+    ? `amp:cache:v5:rank:${size}:${normalize(range)}:${normalize(q)}`
     : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
@@ -411,7 +428,16 @@ export default async function handler(req, res) {
       }
       if (!/\(/.test(card.title)) card.title += ` (${range.toLowerCase()})`;
     }
-    card.items = card.items.map(({ name, reason }) => ({ name, reason }));
+    const chrono = card.order === "chronological";
+    card.items = card.items.map(({ name, reason, visual, from, to }) => {
+      const it = { name, reason };
+      if (visual) it.visual = visual;
+      if (chrono && (from !== null || to !== null)) {
+        const f = from ?? to, t = to ?? from;
+        it.year = f === t ? String(f) : f + "–" + t;
+      }
+      return it;
+    });
 
     await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]);
     const partial = !!card.partial;
