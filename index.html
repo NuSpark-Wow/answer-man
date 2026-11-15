@@ -409,6 +409,7 @@
     if (state.busy) return;
     setBusy(true);
     var isFollow = payload.mode === "followup";
+    var fIdx = (payload.followIndex === undefined) ? null : payload.followIndex;
     var msg = isFollow ? "Mr. Paul is thinking about your follow-up…" : payload.kind === "ranking" ? (payload.size >= 50 ? "Mr. Paul is checking the published rankings… a list of " + payload.size + " can take a minute or two." : "Mr. Paul is checking the published rankings…")
             : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
             : payload.mode === "deeper" ? "Mr. Paul is digging deeper…"
@@ -417,7 +418,11 @@
     lightUp(false);
     var thinkHtml = '<span class="dots"><span></span><span></span><span></span></span>' + msg;
     var thinkingEl = null;
-    if (isFollow){
+    if (fIdx !== null){
+      var fel = document.getElementById("fc-" + fIdx);
+      thinkingEl = document.createElement("div"); thinkingEl.className = "thinking"; thinkingEl.innerHTML = thinkHtml;
+      fel.querySelector(".actions").replaceWith(thinkingEl);
+    } else if (isFollow){
       thinkingEl = document.createElement("div"); thinkingEl.className = "thinking"; thinkingEl.innerHTML = thinkHtml;
       document.getElementById("thread").appendChild(thinkingEl);
       thinkingEl.scrollIntoView({ behavior:"smooth", block:"nearest" });
@@ -434,17 +439,18 @@
       setBusy(false);
       if (!res.ok || !res.j.card){
         var err = res.j.error || "Something went wrong. Please try again.";
-        if (isFollow){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; lightUp(true); }
+        if (isFollow || fIdx !== null){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; lightUp(true); }
         else notice(err);
         return;
       }
+      if (fIdx !== null){ updateFollow(fIdx, res.j.card, payload.mode); return; }
       if (isFollow){ thinkingEl.remove(); appendFollow(res.j.card, payload); return; }
       state.lastQ = payload;
       render(res.j.card, payload, res.j.cached);
     }).catch(function(){
       setBusy(false);
       var err = "Mr. Paul couldn't connect. Please check your internet and try again.";
-      if (isFollow && thinkingEl){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; }
+      if ((isFollow || fIdx !== null) && thinkingEl){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; }
       else notice(err);
     });
   }
@@ -455,9 +461,11 @@
     if (card.facts && card.facts.length) t += "\n" + card.facts.join("\n");
     return t.slice(0, 2500);
   }
-  function appendFollow(card, payload){
-    var html = '<div class="card"><span class="badge">Follow-up</span>';
-    html += '<div class="asked">You asked: <b>' + esc(card.question || payload.followup) + '</b></div>';
+  var follows = [];
+  function followInner(card, idx, mode){
+    var label = "Follow-up" + (mode === "simplify" ? " · Simplified" : mode === "deeper" ? " · Deeper" : mode === "double" ? " · Double Length" : "");
+    var html = '<span class="badge">' + label + '</span>';
+    html += '<div class="asked">You asked: <b>' + esc(follows[idx].question) + '</b></div>';
     if (card.title) html += '<h2>' + esc(card.title) + '</h2>';
     String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
     if (card.items && card.items.length){
@@ -466,12 +474,45 @@
     if (card.facts && card.facts.length){
       html += '<ul class="facts">'; card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; }); html += '</ul>';
     }
-    html += '</div>';
+    html += '<div class="actions">';
+    if (card.type !== "redirect"){
+      if (mode !== "simplify") html += '<button class="act" data-fmode="simplify">Simplify</button>';
+      if (mode !== "deeper") html += '<button class="act" data-fmode="deeper">Go Deeper</button>';
+      if (mode !== "double") html += '<button class="act" data-fmode="double">Double Length</button>';
+    }
+    html += '<button class="act new">New Question</button></div>';
+    return html;
+  }
+  function wireFollow(el, idx){
+    el.querySelector(".act.new").addEventListener("click", newQuestion);
+    el.querySelectorAll(".act[data-fmode]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var f = follows[idx], base = state.lastQ || {};
+        ask({ kind:"question", question:f.question, door:base.door || "what", mode:b.dataset.fmode, previous:f.text, noCache:true, followIndex:idx });
+      });
+    });
+  }
+  function appendFollow(card, payload){
+    var idx = follows.length;
+    follows.push({ question: card.question || payload.followup, text: cardText(card) });
     var thread = document.getElementById("thread");
-    thread.insertAdjacentHTML("beforeend", html);
-    state.lastAnswer = cardText(card);
+    var el = document.createElement("div");
+    el.className = "card"; el.id = "fc-" + idx;
+    el.innerHTML = followInner(card, idx, "normal");
+    thread.appendChild(el);
+    wireFollow(el, idx);
+    state.lastAnswer = follows[idx].text;
     lightUp(card.type !== "redirect");
-    thread.lastElementChild.scrollIntoView({ behavior:"smooth", block:"start" });
+    el.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
+  function updateFollow(idx, card, mode){
+    var el = document.getElementById("fc-" + idx); if (!el) return;
+    follows[idx].text = cardText(card);
+    el.innerHTML = followInner(card, idx, mode);
+    wireFollow(el, idx);
+    state.lastAnswer = follows[idx].text;
+    lightUp(card.type !== "redirect");
+    el.scrollIntoView({ behavior:"smooth", block:"start" });
   }
   function lightUp(on){
     ["figRight","miniRight"].forEach(function(id){
@@ -523,6 +564,7 @@
       html += '<div class="explore">Want more? Try <a href="' + EXPLORE_LINKS[card.explore] + '" target="_top">' + esc(card.explore) + ' →</a></div>';
     }
     html += '</div>';
+    follows = [];
     html += '<div id="thread"></div>';
     html += '<div class="follow-label">Not quite right, or want to know more? Ask a follow-up.</div>' +
             '<form class="follow" id="fForm" autocomplete="off"><input id="fInput" maxlength="300" aria-label="Follow-up or clarification"><button id="fGo" type="submit">Ask</button></form>';
@@ -530,6 +572,7 @@
     if (card.question && payload.kind === "question" && payload.mode === "normal") document.getElementById("qInput").value = card.question;
     lightUp(card.type !== "redirect");
     state.lastAnswer = cardText(card);
+    state.mainAnswer = state.lastAnswer;
     document.getElementById("fForm").addEventListener("submit", function(e){
       e.preventDefault();
       var f = document.getElementById("fInput").value.trim();
@@ -542,7 +585,7 @@
     out.querySelectorAll(".act[data-mode]").forEach(function(a){
       a.addEventListener("click", function(){
         var base = state.lastQ;
-        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:state.lastAnswer });
+        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:state.mainAnswer });
       });
     });
   }
