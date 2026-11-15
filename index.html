@@ -124,6 +124,7 @@
   .list b{display:block;font-size:16px;color:var(--cream)}
   .list span{font-size:14px;color:var(--cream-dim);line-height:1.45}
   .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .act.new{background:transparent;color:var(--cream);border:1px solid rgba(247,236,210,.55)}
   .act{
     font:600 14px 'Inter';padding:10px 18px;border-radius:999px;cursor:pointer;
     background:var(--cream);color:var(--ink);border:none
@@ -248,7 +249,7 @@
           <button class="door" data-door="how">How</button>
         </div>
         <form class="ask" id="qForm" autocomplete="off">
-          <input id="qInput" maxlength="300" placeholder="Who invented the telephone?" aria-label="Your question">
+          <input id="qInput" maxlength="300" aria-label="Your question">
           <button class="go" id="qGo" type="submit">Ask</button>
         </form>
       </section>
@@ -261,7 +262,7 @@
           <button class="size" data-size="100">100</button>
         </div>
         <form class="ask" id="rForm" autocomplete="off">
-          <input id="rInput" maxlength="200" placeholder="Beaches in New Jersey" aria-label="List topic">
+          <input id="rInput" maxlength="200" aria-label="List topic">
           <button class="go" id="rGo" type="submit">Research</button>
         </form>
         <div class="hint">Mr. Paul doesn't pick a #1. He shows what shows up most across published rankings, listed A–Z.</div>
@@ -354,6 +355,8 @@
     b.addEventListener("click", function(){
       state.tab = b.dataset.tab;
       setActive(".tab","data-tab",state.tab);
+      document.getElementById("qInput").value = "";
+      document.getElementById("rInput").value = "";
       document.getElementById("qPanel").hidden = state.tab !== "question";
       document.getElementById("rPanel").hidden = state.tab !== "ranking";
       welcome();
@@ -364,7 +367,7 @@
       state.door = b.dataset.door;
       setActive(".door","data-door",state.door);
       var inp = document.getElementById("qInput");
-      inp.placeholder = PLACEHOLDERS[state.door];
+      inp.value = "";
       inp.focus();
     });
   });
@@ -374,13 +377,13 @@
   document.getElementById("qForm").addEventListener("submit", function(e){
     e.preventDefault();
     var q = document.getElementById("qInput").value.trim();
-    if (!q) { q = PLACEHOLDERS[state.door]; document.getElementById("qInput").value = q; }
+    if (!q) { document.getElementById("qInput").focus(); return; }
     ask({ kind:"question", question:q, door:state.door, mode:"normal" });
   });
   document.getElementById("rForm").addEventListener("submit", function(e){
     e.preventDefault();
     var q = document.getElementById("rInput").value.trim();
-    if (!q) { q = "Beaches in New Jersey"; document.getElementById("rInput").value = q; }
+    if (!q) { document.getElementById("rInput").focus(); return; }
     ask({ kind:"ranking", question:q, size:state.size });
   });
 
@@ -423,7 +426,18 @@
       if (on) el.classList.add("lit");
     });
   }
-  function notice(text){ out.innerHTML = '<div class="notice">' + esc(text) + '</div>'; }
+  function notice(text){
+    out.innerHTML = '<div class="notice">' + esc(text) + '</div><div class="actions"><button class="act new">' + (state.tab === "ranking" ? "New List" : "New Question") + '</button></div>';
+    out.querySelector(".act.new").addEventListener("click", newQuestion);
+  }
+  function newQuestion(){
+    if (state.busy) return;
+    document.getElementById("qInput").value = "";
+    document.getElementById("rInput").value = "";
+    state.lastQ = null; state.lastAnswer = "";
+    welcome();
+    document.getElementById(state.tab === "ranking" ? "rInput" : "qInput").focus();
+  }
 
   function render(card, payload, cached){
     var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size
@@ -441,13 +455,14 @@
       card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; });
       html += '</ul>';
     }
+    html += '<div class="actions">';
     if (payload.kind === "question" && card.type !== "redirect"){
-      html += '<div class="actions">';
       if (payload.mode !== "simplify") html += '<button class="act" data-mode="simplify">Simplify</button>';
       if (payload.mode !== "deeper") html += '<button class="act" data-mode="deeper">Go Deeper</button>';
       if (payload.mode !== "normal") html += '<button class="act" data-mode="normal">Original Answer</button>';
-      html += '</div>';
     }
+    html += '<button class="act new">' + (payload.kind === "ranking" ? "New List" : "New Question") + '</button>';
+    html += '</div>';
     if (card.explore && EXPLORE_LINKS[card.explore]){
       html += '<div class="explore">Want more? Try <a href="' + EXPLORE_LINKS[card.explore] + '" target="_top">' + esc(card.explore) + ' →</a></div>';
     }
@@ -455,7 +470,8 @@
     out.innerHTML = html;
     lightUp(card.type !== "redirect");
     state.lastAnswer = card.answer || "";
-    out.querySelectorAll(".act").forEach(function(a){
+    out.querySelector(".act.new").addEventListener("click", newQuestion);
+    out.querySelectorAll(".act[data-mode]").forEach(function(a){
       a.addEventListener("click", function(){
         var base = state.lastQ;
         ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:state.lastAnswer });
