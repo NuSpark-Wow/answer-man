@@ -105,6 +105,13 @@
   .size.active{background:linear-gradient(180deg,#fff6dc,var(--gold-hi))}
   .size:disabled{opacity:.45;cursor:not-allowed}
   .size small{display:block;font-size:10px;font-weight:600;opacity:.8}
+  .ranges{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:0 0 14px}
+  .ranges .lbl{font:600 12px 'Inter';letter-spacing:.1em;text-transform:uppercase;color:var(--cream-dim);margin-right:2px}
+  .range{font:600 13px 'Inter';padding:8px 14px;border-radius:999px;cursor:pointer;background:transparent;color:var(--cream);border:1px solid rgba(247,236,210,.45)}
+  .range.active{background:var(--cream);color:var(--ink);border-color:var(--cream)}
+  .range.active::before{content:"✓ ";font-weight:800}
+  #rangeOther{font:500 14px 'Inter';padding:8px 12px;border-radius:999px;border:2px solid rgba(0,0,0,.25);background:var(--cream);color:var(--ink);outline:none;width:210px}
+  #rangeOther[hidden]{display:none}
 
   /* ---------- Answer card ---------- */
   #out{margin-top:22px;flex:1}
@@ -273,6 +280,14 @@
           <button class="size" data-size="50">50</button>
           <button class="size" data-size="100">100</button>
         </div>
+        <div class="ranges" id="ranges">
+          <span class="lbl">Time range</span>
+          <button type="button" class="range active" data-range="All time">All time</button>
+          <button type="button" class="range" data-range="Last 100 years">Last 100 years</button>
+          <button type="button" class="range" data-range="Last 50 years">Last 50 years</button>
+          <button type="button" class="range" data-range="other">Other</button>
+          <input id="rangeOther" maxlength="60" hidden aria-label="Your time range (for example: the 1990s, or since 2000)">
+        </div>
         <form class="ask" id="rForm" autocomplete="off">
           <input id="rInput" maxlength="200" aria-label="List topic">
           <button class="go" id="rGo" type="submit">Research</button>
@@ -314,7 +329,7 @@
   };
 
   var API = "/api/ask";
-  var state = { tab:"question", door:"who", size:25, lastQ:null, lastAnswer:"", busy:false };
+  var state = { tab:"question", door:"who", size:25, range:"All time", lastQ:null, lastAnswer:"", busy:false };
   var tsSiteKey = "", tsWidget = null, tsResolve = null;
   var out = document.getElementById("out");
 
@@ -386,6 +401,20 @@
   document.querySelectorAll(".size").forEach(function(b){
     b.addEventListener("click", function(){ if (b.disabled) return; state.size = parseInt(b.dataset.size,10); setActive(".size","data-size",b.dataset.size); });
   });
+  document.querySelectorAll(".range").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.range = b.dataset.range;
+      setActive(".range","data-range",state.range);
+      var other = document.getElementById("rangeOther");
+      other.hidden = state.range !== "other";
+      if (!other.hidden) other.focus();
+    });
+  });
+  function currentRange(){
+    if (state.range !== "other") return state.range;
+    var v = document.getElementById("rangeOther").value.trim();
+    return v || "All time";
+  }
   document.getElementById("qForm").addEventListener("submit", function(e){
     e.preventDefault();
     var q = document.getElementById("qInput").value.trim();
@@ -396,7 +425,7 @@
     e.preventDefault();
     var q = document.getElementById("rInput").value.trim();
     if (!q) { document.getElementById("rInput").focus(); return; }
-    ask({ kind:"ranking", question:q, size:state.size });
+    ask({ kind:"ranking", question:q, size:state.size, range:currentRange() });
   });
 
   // ---------- Ask ----------
@@ -535,7 +564,7 @@
   }
 
   function render(card, payload, cached){
-    var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size
+    var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size + (payload.range && payload.range !== "All time" ? " · " + payload.range : "")
               : payload.door.toUpperCase() + (payload.mode === "simplify" ? " · Simplified" : payload.mode === "deeper" ? " · Deeper" : "");
     var html = '<div class="card"><span class="badge">' + esc(badge) + '</span>' + (cached ? '<span class="cached">instant answer</span>' : '');
     if (card.question && payload.kind === "question") html += '<div class="asked">You asked: <b>' + esc(card.question) + '</b></div>';
@@ -579,7 +608,7 @@
       if (!f || !state.lastQ){ document.getElementById("fInput").focus(); return; }
       document.getElementById("fInput").value = "";
       var base = state.lastQ;
-      ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, mode:"followup", followup:f, previous:state.lastAnswer });
+      ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, range:base.range, mode:"followup", followup:f, previous:state.lastAnswer });
     });
     out.querySelector(".act.new").addEventListener("click", newQuestion);
     out.querySelectorAll(".act[data-mode]").forEach(function(a){
@@ -606,7 +635,7 @@
         });
       });
     } else {
-      out.innerHTML = '<div class="welcome">Pick a size and a topic. Mr. Paul researches what keeps showing up across published rankings,<br>then lists it <b>A–Z</b>, each with a one-line reason.' +
+      out.innerHTML = '<div class="welcome">Pick a size and a topic. Mr. Paul researches what keeps showing up across published rankings, then lists it <b>A–Z</b>, each with a one-line reason.' +
         '<div class="examples">' +
         ['Beaches in New Jersey','Classic rock albums','National parks','Inventions of the 20th century']
           .map(function(t){ return '<button class="ex">'+esc(t)+'</button>'; }).join("") +
@@ -614,7 +643,7 @@
       out.querySelectorAll(".ex").forEach(function(b){
         b.addEventListener("click", function(){
           document.getElementById("rInput").value = b.textContent;
-          ask({ kind:"ranking", question:b.textContent, size:state.size });
+          ask({ kind:"ranking", question:b.textContent, size:state.size, range:currentRange() });
         });
       });
     }
