@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Answer Man | Ask Mr. Paul | NuSpark Learn...Wow!</title>
+<meta name="description" content="The Answer Man. Ask Mr. Paul: Who, What, Where, When, Why, How. One clear answer. No ads, no clutter.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --gold-1:#5a420c; --gold-2:#7a5a16; --gold-3:#94701f; --gold-hi:#d9b45a;
+    --cream:#f7ecd2; --cream-dim:#e6d6b0; --ink:#2a2010;
+    --silver-1:#3d4147; --silver-2:#5b6068; --silver-3:#8b9098; --silver-hi:#c9ced6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:radial-gradient(ellipse at top,#2b2d31 0%,#141518 70%);
+    color:var(--cream);
+    display:flex;justify-content:center;align-items:flex-start;
+    padding:28px 14px 40px;min-height:100vh;
+  }
+  /* ---------- Laptop ---------- */
+  .laptop{width:100%;max-width:1040px}
+  .lid{
+    background:linear-gradient(160deg,var(--silver-3) 0%,var(--silver-2) 18%,var(--silver-1) 55%,var(--silver-2) 85%,var(--silver-3) 100%);
+    border-radius:22px 22px 10px 10px;
+    padding:18px 18px 22px;
+    box-shadow:0 0 0 1px #1d1f23, inset 0 1px 0 rgba(255,255,255,.35), 0 30px 60px rgba(0,0,0,.55);
+    position:relative;
+  }
+  .cam{width:8px;height:8px;border-radius:50%;background:#15171a;box-shadow:inset 0 0 0 2px #2a2d33;margin:0 auto 10px}
+  .screen{
+    background:
+      radial-gradient(ellipse at 50% -10%,rgba(217,180,90,.28),transparent 55%),
+      linear-gradient(170deg,var(--gold-3) 0%,var(--gold-2) 35%,var(--gold-1) 100%);
+    border-radius:8px;
+    min-height:620px;
+    padding:30px 34px 22px;
+    box-shadow:inset 0 0 0 2px #0e0f11, inset 0 0 40px rgba(0,0,0,.35);
+    display:flex;flex-direction:column;
+  }
+  .base{
+    height:22px;margin:0 -4%;
+    background:linear-gradient(180deg,var(--silver-hi) 0%,var(--silver-3) 35%,var(--silver-1) 100%);
+    border-radius:0 0 28px 28px;
+    box-shadow:0 18px 30px rgba(0,0,0,.5);
+    position:relative;
+  }
+  .base::before{content:"";position:absolute;left:50%;top:0;transform:translateX(-50%);width:18%;height:8px;background:var(--silver-2);border-radius:0 0 10px 10px}
+
+  /* ---------- Header ---------- */
+  header{text-align:center;margin-bottom:22px}
+  .brand{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--cream-dim);opacity:.85}
+  h1{font-family:'Playfair Display',serif;font-size:clamp(30px,5vw,46px);font-weight:800;color:var(--cream);text-shadow:0 2px 0 rgba(0,0,0,.25);margin-top:4px}
+  .sub{font-family:'Playfair Display',serif;font-size:clamp(17px,2.4vw,22px);color:var(--gold-hi);margin-top:2px;letter-spacing:.02em}
+
+  /* ---------- Tabs ---------- */
+  .tabs{display:flex;justify-content:center;gap:8px;margin-bottom:18px}
+  .tab{
+    font:600 13px 'Inter';letter-spacing:.05em;text-transform:uppercase;
+    background:transparent;color:var(--cream-dim);border:1px solid rgba(247,236,210,.35);
+    padding:8px 16px;border-radius:999px;cursor:pointer;transition:.15s
+  }
+  .tab.active{background:var(--cream);color:var(--ink);border-color:var(--cream)}
+
+  /* ---------- Doors ---------- */
+  .doors{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+  .door{
+    font:700 15px 'Inter';letter-spacing:.03em;
+    padding:12px 6px;border-radius:10px;cursor:pointer;color:#1d1f23;
+    background:linear-gradient(180deg,#eef0f3 0%,var(--silver-hi) 45%,var(--silver-3) 100%);
+    border:1px solid #2a2d33;box-shadow:inset 0 1px 0 #fff,0 2px 0 rgba(0,0,0,.35);
+    transition:transform .1s, box-shadow .1s;
+  }
+  .door:hover{transform:translateY(-1px)}
+  .door.active{
+    background:linear-gradient(180deg,#fff6dc 0%,var(--gold-hi) 100%);
+    box-shadow:inset 0 1px 0 #fff,0 0 0 2px var(--cream),0 2px 0 rgba(0,0,0,.35)
+  }
+
+  /* ---------- Ask bar ---------- */
+  .ask{display:flex;gap:10px}
+  .ask input{
+    flex:1;font:500 17px 'Inter';padding:15px 18px;border-radius:12px;
+    border:2px solid rgba(0,0,0,.25);background:var(--cream);color:var(--ink);outline:none
+  }
+  .ask input:focus{border-color:var(--gold-hi);box-shadow:0 0 0 3px rgba(217,180,90,.35)}
+  .go{
+    font:700 16px 'Inter';padding:0 24px;border-radius:12px;cursor:pointer;border:1px solid #1d1f23;
+    background:linear-gradient(180deg,var(--silver-2),var(--silver-1));color:var(--cream);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.25)
+  }
+  .go:disabled{opacity:.6;cursor:wait}
+  .hint{font-size:13px;color:var(--cream-dim);margin-top:8px;text-align:center;opacity:.9}
+
+  .sizes{display:flex;justify-content:center;gap:8px;margin:0 0 14px}
+  .size{
+    font:700 14px 'Inter';padding:9px 18px;border-radius:10px;cursor:pointer;color:#1d1f23;
+    background:linear-gradient(180deg,#eef0f3,var(--silver-3));border:1px solid #2a2d33
+  }
+  .size.active{background:linear-gradient(180deg,#fff6dc,var(--gold-hi))}
+  .size:disabled{opacity:.45;cursor:not-allowed}
+  .size small{display:block;font-size:10px;font-weight:600;opacity:.8}
+
+  /* ---------- Answer card ---------- */
+  #out{margin-top:22px;flex:1}
+  .card{
+    background:rgba(20,14,4,.28);border:1px solid rgba(247,236,210,.25);
+    border-radius:14px;padding:22px 24px;animation:rise .25s ease
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .badge{display:inline-block;font:700 11px 'Inter';letter-spacing:.14em;text-transform:uppercase;background:var(--cream);color:var(--ink);padding:4px 10px;border-radius:999px;margin-bottom:10px}
+  .card h2{font-family:'Playfair Display',serif;font-size:26px;color:var(--cream);margin-bottom:12px;line-height:1.2}
+  .card p{font-size:17px;line-height:1.65;color:var(--cream);margin-bottom:12px}
+  .facts{margin:6px 0 4px;padding:14px 16px;background:rgba(247,236,210,.1);border-radius:10px;list-style:none}
+  .facts li{font-size:15px;line-height:1.5;padding:4px 0 4px 22px;position:relative}
+  .facts li::before{content:"✦";position:absolute;left:0;color:var(--gold-hi)}
+  .list{list-style:none;columns:2;column-gap:28px;margin-top:6px}
+  .list li{break-inside:avoid;padding:9px 0;border-bottom:1px solid rgba(247,236,210,.15)}
+  .list b{display:block;font-size:16px;color:var(--cream)}
+  .list span{font-size:14px;color:var(--cream-dim);line-height:1.45}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .act{
+    font:600 14px 'Inter';padding:10px 18px;border-radius:999px;cursor:pointer;
+    background:var(--cream);color:var(--ink);border:none
+  }
+  .act:disabled{opacity:.6;cursor:wait}
+  .explore{margin-top:16px;font-size:14px;color:var(--cream-dim)}
+  .explore a{color:var(--gold-hi);font-weight:600;text-decoration:none}
+  .explore a:hover{text-decoration:underline}
+  .cached{font-size:11px;opacity:.6;margin-left:6px}
+
+  .thinking{display:flex;align-items:center;gap:12px;font-size:16px;color:var(--cream);padding:18px 4px}
+  .dots span{display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:50%;background:var(--gold-hi);animation:b 1s infinite}
+  .dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+  @keyframes b{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+  .notice{background:rgba(20,14,4,.35);border-left:4px solid var(--gold-hi);padding:14px 16px;border-radius:8px;font-size:16px}
+
+  .welcome{text-align:center;color:var(--cream-dim);font-size:15px;line-height:1.6;padding:16px 10px}
+  .welcome b{color:var(--cream)}
+  .examples{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+  .ex{font:500 13px 'Inter';background:rgba(247,236,210,.12);color:var(--cream);border:1px solid rgba(247,236,210,.3);padding:7px 12px;border-radius:999px;cursor:pointer}
+  .ex:hover{background:rgba(247,236,210,.22)}
+
+  footer.fine{margin-top:18px;padding-top:12px;border-top:1px solid rgba(247,236,210,.2);font-size:12px;line-height:1.5;color:var(--cream-dim);text-align:center}
+  footer.fine b{color:var(--cream)}
+  #ts{position:fixed;bottom:0;right:0}
+
+
+  /* ---------- Mr. Paul figures ---------- */
+  .stage{display:flex;align-items:flex-end;justify-content:center;gap:0;width:100%;max-width:1560px}
+  .stage .laptop{flex:0 1 1040px;min-width:0}
+  .fig{flex:0 0 clamp(150px,15vw,250px);position:relative;align-self:flex-end;margin-bottom:24px;text-align:center}
+  .fig img{width:100%;height:auto;display:block;-webkit-mask-image:linear-gradient(180deg,#000 82%,transparent 100%);mask-image:linear-gradient(180deg,#000 82%,transparent 100%);filter:drop-shadow(0 14px 18px rgba(0,0,0,.55))}
+  .fig.left{margin-right:-18px;z-index:2}
+  .fig.right{margin-left:-18px;z-index:2}
+  .qmark{
+    font-family:'Playfair Display',serif;font-weight:800;font-size:clamp(70px,7vw,120px);line-height:1;
+    background:linear-gradient(180deg,#fff2c8 0%,var(--gold-hi) 45%,#a87d22 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.5));animation:bob 2.6s ease-in-out infinite;margin-bottom:-6px
+  }
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-10px) rotate(4deg)}}
+  .bubble{
+    position:relative;display:inline-block;background:var(--cream);color:var(--ink);
+    font:700 clamp(15px,1.5vw,20px) 'Playfair Display',serif;padding:12px 18px;border-radius:18px;margin-bottom:14px;
+    box-shadow:0 6px 14px rgba(0,0,0,.45);white-space:nowrap
+  }
+  .bubble::after{content:"";position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);border:12px solid transparent;border-bottom:0;border-top-color:var(--cream)}
+  .fig.right img,.fig.right .bubble,.mini.right img{transition:opacity .5s, filter .5s, transform .5s}
+  .fig.right:not(.lit) img{opacity:.35;filter:grayscale(.8) drop-shadow(0 14px 18px rgba(0,0,0,.55))}
+  .fig.right:not(.lit) .bubble{opacity:0;transform:translateY(10px) scale(.9)}
+  .fig.right.lit .bubble{animation:pop .5s ease}
+  @keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+
+  /* small versions inside the screen, for narrower screens */
+  .minis{display:none}
+  .mini{position:absolute;top:14px;width:84px;text-align:center}
+  .mini img{width:100%;border-radius:50% 50% 12px 12px;background:rgba(0,0,0,.18)}
+  .mini.left{left:14px}.mini.right{right:14px}
+  .mini .q{font:800 34px 'Playfair Display',serif;color:var(--gold-hi);line-height:1;text-shadow:0 2px 3px rgba(0,0,0,.4)}
+  .mini .b{display:inline-block;background:var(--cream);color:var(--ink);font:700 11px 'Inter';padding:4px 7px;border-radius:9px;margin-bottom:3px;white-space:nowrap}
+  .mini.right:not(.lit) img{opacity:.35;filter:grayscale(.8)}
+  .mini.right:not(.lit) .b{visibility:hidden}
+  .screen{position:relative}
+  @media (max-width:1180px){
+    .fig{display:none}
+    .minis{display:block}
+    header{padding:0 92px}
+  }
+  @media (max-width:520px){
+    .mini{width:58px;top:10px}.mini.left{left:8px}.mini.right{right:8px}
+    .mini .q{font-size:24px}.mini .b{font-size:9px;padding:3px 4px;white-space:normal;line-height:1.15;width:100%}
+    header{padding:0 60px}
+  }
+
+  @media (max-width:720px){
+    body{padding:10px 6px 24px}
+    .lid{padding:10px 10px 14px;border-radius:16px 16px 8px 8px}
+    .screen{padding:20px 16px 16px;min-height:auto}
+    .doors{grid-template-columns:repeat(3,1fr)}
+    .ask{flex-direction:column}
+    .go{padding:14px}
+    .list{columns:1}
+    .card{padding:18px 16px}
+    .base{height:14px;margin:0 -2%}
+    .tab{font-size:11px;padding:8px 12px;letter-spacing:.03em}
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+<div class="fig left" aria-hidden="true">
+  <div class="qmark">?</div>
+  <img src="paul-left.png" alt="">
+</div>
+<div class="laptop">
+  <div class="lid">
+    <div class="cam"></div>
+    <div class="screen">
+      <div class="minis" aria-hidden="true">
+        <div class="mini left"><div class="q">?</div><img src="paul-left.png" alt=""></div>
+        <div class="mini right" id="miniRight"><div class="b">Wow… who knew?</div><img src="paul-right.png" alt=""></div>
+      </div>
+      <header>
+        <div class="brand">NuSpark Learn...Wow!</div>
+        <h1>The Answer Man</h1>
+        <div class="sub">Ask Mr. Paul</div>
+      </header>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="question">Ask a Question</button>
+        <button class="tab" data-tab="ranking">Ranking Research</button>
+      </div>
+
+      <!-- Question mode -->
+      <section id="qPanel">
+        <div class="doors" id="doors">
+          <button class="door active" data-door="who">Who</button>
+          <button class="door" data-door="what">What</button>
+          <button class="door" data-door="where">Where</button>
+          <button class="door" data-door="when">When</button>
+          <button class="door" data-door="why">Why</button>
+          <button class="door" data-door="how">How</button>
+        </div>
+        <form class="ask" id="qForm" autocomplete="off">
+          <input id="qInput" maxlength="300" placeholder="Who invented the telephone?" aria-label="Your question">
+          <button class="go" id="qGo" type="submit">Ask</button>
+        </form>
+      </section>
+
+      <!-- Ranking mode -->
+      <section id="rPanel" hidden>
+        <div class="sizes" id="sizes">
+          <button class="size active" data-size="25">25</button>
+          <button class="size" data-size="50">50</button>
+          <button class="size" data-size="100">100</button>
+        </div>
+        <form class="ask" id="rForm" autocomplete="off">
+          <input id="rInput" maxlength="200" placeholder="Beaches in New Jersey" aria-label="List topic">
+          <button class="go" id="rGo" type="submit">Research</button>
+        </form>
+        <div class="hint">Mr. Paul doesn't pick a #1. He shows what shows up most across published rankings, listed A–Z.</div>
+      </section>
+
+      <div id="out"></div>
+
+      <footer class="fine">
+        <b>Mr. Paul does his homework, but AI can make mistakes</b>, so double-check anything important.
+        Answers are for learning only and aren't medical, legal or financial advice. For those, talk to a professional.
+        No ads. No sponsored answers.
+      </footer>
+    </div>
+  </div>
+  <div class="base"></div>
+</div>
+<div class="fig right" id="figRight" aria-hidden="true">
+  <div class="bubble">Wow… who knew?</div>
+  <img src="paul-right.png" alt="">
+</div>
+</div>
+<div id="ts"></div>
+
+<script>
+(function(){
+  // Where each "Explore more" link goes. Swap in the exact page links when ready.
+  var SITE = "https://nusparklearnwow.com/";
+  var EXPLORE_LINKS = {
+    "Mr. Paul's Classroom": SITE, "The Lecture Hall": SITE, "Remember When": SITE,
+    "How It Works": SITE, "What's the Difference?": SITE, "The AI Encyclopedias": SITE,
+    "Debate Me": SITE, "The Guess Room": SITE, "The Puzzle Parlor": SITE
+  };
+  var PLACEHOLDERS = {
+    who:"Who invented the telephone?", what:"What is a black hole?",
+    where:"Where is the Great Barrier Reef?", when:"When did the Wright brothers first fly?",
+    why:"Why is the sky blue?", how:"How does a rainbow form?"
+  };
+
+  var API = "/api/ask";
+  var state = { tab:"question", door:"who", size:25, lastQ:null, lastAnswer:"", busy:false };
+  var tsSiteKey = "", tsWidget = null, tsResolve = null;
+  var out = document.getElementById("out");
+
+  var visitor = "";
+  try {
+    visitor = localStorage.getItem("amp_vid") || "";
+    if (!visitor) { visitor = (Date.now().toString(36) + Math.random().toString(36).slice(2,10)); localStorage.setItem("amp_vid", visitor); }
+  } catch(e) { visitor = ""; }
+
+  function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  // ---------- Config + human check ----------
+  fetch(API).then(function(r){return r.json();}).then(function(cfg){
+    var sizes = cfg.rankingSizes || [25];
+    document.querySelectorAll(".size").forEach(function(b){
+      var n = parseInt(b.dataset.size,10);
+      if (sizes.indexOf(n) === -1){ b.disabled = true; b.innerHTML = n + "<small>coming soon</small>"; }
+    });
+    state.size = sizes[0] || 25;
+    setActive(".size", "data-size", String(state.size));
+    if (cfg.turnstileSiteKey){
+      tsSiteKey = cfg.turnstileSiteKey;
+      var s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ampTs";
+      s.async = true; document.head.appendChild(s);
+    }
+  }).catch(function(){});
+
+  window.ampTs = function(){
+    tsWidget = window.turnstile.render("#ts", {
+      sitekey: tsSiteKey, execution: "execute", appearance: "interaction-only",
+      callback: function(token){ if (tsResolve){ tsResolve(token); tsResolve = null; } },
+      "error-callback": function(){ if (tsResolve){ tsResolve(""); tsResolve = null; } }
+    });
+  };
+  function getToken(){
+    if (!tsSiteKey || !window.turnstile || tsWidget === null) return Promise.resolve("");
+    return new Promise(function(resolve){
+      tsResolve = resolve;
+      try { window.turnstile.reset(tsWidget); window.turnstile.execute(tsWidget); } catch(e){ resolve(""); }
+      setTimeout(function(){ if (tsResolve){ tsResolve(""); tsResolve = null; } }, 12000);
+    });
+  }
+
+  // ---------- UI wiring ----------
+  function setActive(sel, attr, val){
+    document.querySelectorAll(sel).forEach(function(b){ b.classList.toggle("active", b.getAttribute(attr) === val); });
+  }
+  document.querySelectorAll(".tab").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.tab = b.dataset.tab;
+      setActive(".tab","data-tab",state.tab);
+      document.getElementById("qPanel").hidden = state.tab !== "question";
+      document.getElementById("rPanel").hidden = state.tab !== "ranking";
+      welcome();
+    });
+  });
+  document.querySelectorAll(".door").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.door = b.dataset.door;
+      setActive(".door","data-door",state.door);
+      var inp = document.getElementById("qInput");
+      inp.placeholder = PLACEHOLDERS[state.door];
+      inp.focus();
+    });
+  });
+  document.querySelectorAll(".size").forEach(function(b){
+    b.addEventListener("click", function(){ if (b.disabled) return; state.size = parseInt(b.dataset.size,10); setActive(".size","data-size",b.dataset.size); });
+  });
+  document.getElementById("qForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var q = document.getElementById("qInput").value.trim();
+    if (!q) { q = PLACEHOLDERS[state.door]; document.getElementById("qInput").value = q; }
+    ask({ kind:"question", question:q, door:state.door, mode:"normal" });
+  });
+  document.getElementById("rForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var q = document.getElementById("rInput").value.trim();
+    if (!q) { q = "Beaches in New Jersey"; document.getElementById("rInput").value = q; }
+    ask({ kind:"ranking", question:q, size:state.size });
+  });
+
+  // ---------- Ask ----------
+  function setBusy(b){
+    state.busy = b;
+    ["qGo","rGo"].forEach(function(id){ document.getElementById(id).disabled = b; });
+    document.querySelectorAll(".act").forEach(function(a){ a.disabled = b; });
+  }
+  function ask(payload){
+    if (state.busy) return;
+    setBusy(true);
+    var msg = payload.kind === "ranking" ? (payload.size >= 50 ? "Mr. Paul is checking the published rankings… a list of " + payload.size + " can take a minute or two." : "Mr. Paul is checking the published rankings…")
+            : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
+            : payload.mode === "deeper" ? "Mr. Paul is digging deeper…"
+            : "Mr. Paul is looking that up…";
+    lightUp(false);
+    out.innerHTML = '<div class="thinking"><span class="dots"><span></span><span></span><span></span></span>' + msg + '</div>';
+    getToken().then(function(token){
+      payload.turnstileToken = token;
+      payload.visitor = visitor;
+      return fetch(API, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    }).then(function(r){
+      return r.json().then(function(j){ return { ok:r.ok, j:j }; });
+    }).then(function(res){
+      setBusy(false);
+      if (!res.ok || !res.j.card){ notice(res.j.error || "Something went wrong. Please try again."); return; }
+      if (payload.kind === "question") state.lastQ = payload;
+      render(res.j.card, payload, res.j.cached);
+    }).catch(function(){
+      setBusy(false);
+      notice("Mr. Paul couldn't connect. Please check your internet and try again.");
+    });
+  }
+
+  function lightUp(on){
+    ["figRight","miniRight"].forEach(function(id){
+      var el = document.getElementById(id); if (!el) return;
+      el.classList.remove("lit"); void el.offsetWidth;
+      if (on) el.classList.add("lit");
+    });
+  }
+  function notice(text){ out.innerHTML = '<div class="notice">' + esc(text) + '</div>'; }
+
+  function render(card, payload, cached){
+    var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size
+              : payload.door.toUpperCase() + (payload.mode === "simplify" ? " · Simplified" : payload.mode === "deeper" ? " · Deeper" : "");
+    var html = '<div class="card"><span class="badge">' + esc(badge) + '</span>' + (cached ? '<span class="cached">instant answer</span>' : '');
+    html += '<h2>' + esc(card.title) + '</h2>';
+    String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
+    if (card.items && card.items.length){
+      html += '<ul class="list">';
+      card.items.forEach(function(it){ html += '<li><b>' + esc(it.name) + '</b><span>' + esc(it.reason) + '</span></li>'; });
+      html += '</ul>';
+    }
+    if (card.facts && card.facts.length){
+      html += '<ul class="facts">';
+      card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; });
+      html += '</ul>';
+    }
+    if (payload.kind === "question" && card.type !== "redirect"){
+      html += '<div class="actions">';
+      if (payload.mode !== "simplify") html += '<button class="act" data-mode="simplify">Simplify</button>';
+      if (payload.mode !== "deeper") html += '<button class="act" data-mode="deeper">Go Deeper</button>';
+      if (payload.mode !== "normal") html += '<button class="act" data-mode="normal">Original Answer</button>';
+      html += '</div>';
+    }
+    if (card.explore && EXPLORE_LINKS[card.explore]){
+      html += '<div class="explore">Want more? Try <a href="' + EXPLORE_LINKS[card.explore] + '" target="_top">' + esc(card.explore) + ' →</a></div>';
+    }
+    html += '</div>';
+    out.innerHTML = html;
+    lightUp(card.type !== "redirect");
+    state.lastAnswer = card.answer || "";
+    out.querySelectorAll(".act").forEach(function(a){
+      a.addEventListener("click", function(){
+        var base = state.lastQ;
+        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:state.lastAnswer });
+      });
+    });
+  }
+
+  function welcome(){
+    lightUp(false);
+    if (state.tab === "question"){
+      out.innerHTML = '<div class="welcome">Pick a door — <b>Who, What, Where, When, Why or How</b> — and ask anything.<br>One clear answer. No ads, no clutter.' +
+        '<div class="examples">' +
+        ['who|Who was Amelia Earhart?','what|What is photosynthesis?','where|Where is Machu Picchu?','when|When was the printing press invented?','why|Why do leaves change color?','how|How do airplanes stay in the air?']
+          .map(function(x){ var p=x.split("|"); return '<button class="ex" data-door="'+p[0]+'">'+esc(p[1])+'</button>'; }).join("") +
+        '</div></div>';
+      out.querySelectorAll(".ex").forEach(function(b){
+        b.addEventListener("click", function(){
+          state.door = b.dataset.door; setActive(".door","data-door",state.door);
+          document.getElementById("qInput").value = b.textContent;
+          ask({ kind:"question", question:b.textContent, door:state.door, mode:"normal" });
+        });
+      });
+    } else {
+      out.innerHTML = '<div class="welcome">Pick a size and a topic. Mr. Paul researches what keeps showing up across published rankings,<br>then lists it <b>A–Z</b>, each with a one-line reason.' +
+        '<div class="examples">' +
+        ['Beaches in New Jersey','Classic rock albums','National parks','Inventions of the 20th century']
+          .map(function(t){ return '<button class="ex">'+esc(t)+'</button>'; }).join("") +
+        '</div></div>';
+      out.querySelectorAll(".ex").forEach(function(b){
+        b.addEventListener("click", function(){
+          document.getElementById("rInput").value = b.textContent;
+          ask({ kind:"ranking", question:b.textContent, size:state.size });
+        });
+      });
+    }
+  }
+  welcome();
+})();
+</script>
+</body>
+</html>
