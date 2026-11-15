@@ -78,12 +78,14 @@ const MODE_GUIDE = {
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
-function rankingRules(size) {
+function rankingRules(size, range) {
   return `${BASE_RULES}
 
 RANKING RESEARCH MODE
-The person picked a topic and wants a list of ${size}. Mr. Paul never picks a #1. Instead, research what shows up most often across published rankings and lists for this topic (use web search), and return exactly ${size} items (or fewer if the topic truly has fewer) as type "list".
-- "title": "Ranking Research: <topic>"
+The person picked a topic and wants a list of ${size}.
+Time range: ${range}. Only include items from that time range (for people, count their career or active years). If a time range doesn't make sense for the topic (for example, beaches or national parks), ignore it.
+Ignore words in the topic like "top", "best", "greatest" or a number; treat the topic as the subject only. Mr. Paul never picks a #1. Instead, research what shows up most often across published rankings and lists for this topic (use web search), and return exactly ${size} items (or fewer if the topic truly has fewer) as type "list".
+- "title": "Ranking Research: <topic>" — add the time range in parentheses unless it's all time or doesn't apply
 - "answer": "What shows up most across published rankings, listed A–Z. Mr. Paul doesn't pick a #1."
 - "items": in A–Z order; each "reason" is ONE short line (about 12 words max) saying why it keeps making the lists. No numbers, no "#1", no superlatives in your own voice.
 - "facts": 1 or 2 short notes on what kinds of sources were looked at (no links).
@@ -272,6 +274,7 @@ export default async function handler(req, res) {
   const mode = MODES.includes(body.mode) ? body.mode : "normal";
   let size = parseInt(body.size, 10);
   if (!RANKING_SIZES.includes(size)) size = RANKING_SIZES[0] || 25;
+  const range = String(body.range || "All time").replace(/[^\w\s,.'’()\-–]/g, "").trim().slice(0, 60) || "All time";
   const visitor = String(body.visitor || "").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
   const ip = clientIp(req);
 
@@ -280,7 +283,7 @@ export default async function handler(req, res) {
   const followup = String(body.followup || "").trim().slice(0, 300);
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
-    ? `amp:cache:v2:rank:${size}:${normalize(q)}`
+    ? `amp:cache:v2:rank:${size}:${normalize(range)}:${normalize(q)}`
     : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
@@ -325,7 +328,7 @@ export default async function handler(req, res) {
     const prev = String(body.previous || "").slice(0, 2500);
     if (mode === "followup") {
       const user = [
-        kind === "ranking" ? `Original Ranking Research topic: ${question}` : `Original question (${door.toUpperCase()} door): ${question}`,
+        kind === "ranking" ? `Original Ranking Research topic: ${question} (time range: ${range})` : `Original question (${door.toUpperCase()} door): ${question}`,
         prev ? `The answer already shown was:\n${prev}` : "",
         `Follow-up or clarification: ${followup}`,
       ].filter(Boolean).join("\n\n");
@@ -339,8 +342,8 @@ export default async function handler(req, res) {
     } else if (kind === "ranking") {
       text = await askClaude({
         model: RANKING_MODEL,
-        system: rankingRules(size),
-        user: `Topic: ${question}\nList size: ${size}`,
+        system: rankingRules(size, range),
+        user: `Topic: ${question}\nList size: ${size}\nTime range: ${range}`,
         maxTokens: size <= 25 ? 4000 : size <= 50 ? 6500 : 12000,
         maxSearches: 4,
       });
