@@ -106,7 +106,7 @@ Time range: ${range}${bounds ? ` (that means ${bounds[0]} to ${bounds[1]})` : ""
 TIME RANGE RULES — the person's time range always wins over your own idea of the topic:
 - Only include items released, made, founded, or active within that range. For people, their career or active years must overlap it.
 - Never drop the range because the topic suggests an era. Example: "classic rock songs" with "past 25 years" means classic-rock-style songs released in that window, not the 1960s and 70s classics.
-- If few items truly fit, return fewer and say so in one short sentence at the start of "answer".
+- Aim for the full ${size}. Before including an item, check its years really fall inside the range, so none get dropped later. If few items truly fit, return fewer and say so in one short sentence at the start of "answer".
 - Only ignore the range for timeless things with no date, like beaches, mountains, or national parks.
 - For every item, include "from" and "to" years (numbers): release year for songs, films, books, inventions (from = to); first and last active year for people, teams, and bands. Use null only for timeless things.
 Ignore words in the topic like "top", "best", "greatest" or a number; treat the topic as the subject only. Mr. Paul never picks a #1. Instead, research what shows up most often across published rankings and lists for this topic (use web search), and return exactly ${size} items (or fewer if the topic truly has fewer) as type "list".
@@ -332,7 +332,7 @@ export default async function handler(req, res) {
   const followup = String(body.followup || "").trim().slice(0, 300);
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
-    ? `amp:cache:v5:rank:${size}:${normalize(range)}:${normalize(q)}`
+    ? `amp:cache:v6:rank:${size}:${normalize(range)}:${normalize(q)}`
     : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
@@ -423,10 +423,12 @@ export default async function handler(req, res) {
         return tt >= lo && f <= hi;
       });
       const dropped = before - card.items.length;
-      if (dropped > 0 && card.items.length < Math.min(size, before) * 0.6) {
-        card.answer = `Only ${card.items.length} strong matches turned up for ${range.toLowerCase()} (${lo}–${hi}). ` + card.answer;
-      }
+      void dropped;
       if (!/\(/.test(card.title)) card.title += ` (${range.toLowerCase()})`;
+    }
+    if (kind === "ranking" && mode !== "followup" && card.type === "list" && card.items.length && card.items.length < size && !/^(Only|Found)\s+\d+/.test(card.answer)) {
+      const span = bounds ? ` for ${bounds[0] || "the start"}–${bounds[1]}` : "";
+      card.answer = `Found ${card.items.length} strong matches${span}, so this list has ${card.items.length} instead of ${size}. ` + card.answer;
     }
     const chrono = card.order === "chronological";
     card.items = card.items.map(({ name, reason, visual, from, to }) => {
