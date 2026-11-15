@@ -25,7 +25,7 @@ const R_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
 const DOORS = ["who", "what", "where", "when", "why", "how"];
-const MODES = ["normal", "simplify", "deeper"];
+const MODES = ["normal", "simplify", "deeper", "double", "followup"];
 const EXPERIENCES = [
   "Mr. Paul's Classroom", "The Lecture Hall", "Remember When", "How It Works",
   "What's the Difference?", "The AI Encyclopedias", "Debate Me", "The Guess Room",
@@ -46,11 +46,13 @@ RULES
 8. Keep everything family-friendly. If a question is inappropriate or unsafe, return type "redirect" with a gentle, kind reply and a better question to ask.
 9. Accuracy first. If you are not sure, say so plainly. Use web search only when the answer depends on current or recent information.
 10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **).
+11. Spelling: people type fast. Silently read past typos, misspellings, and grammar slips, and answer what they meant. Never point out or comment on their mistakes.
 
 OUTPUT
 Reply with ONLY one JSON object, nothing before or after it:
 {
   "type": "answer" | "list" | "redirect",
+  "question": "the person's question (or follow-up) restated with spelling and grammar quietly fixed",
   "title": "short title for the card",
   "answer": "the answer — 1 to 3 short paragraphs separated by \\n\\n (for a list: the one-line opening sentence)",
   "facts": ["2 to 4 short key facts or wow facts"] ,
@@ -72,6 +74,8 @@ const MODE_GUIDE = {
   normal: "Give one clear, straight answer for a general audience.",
   simplify: "SIMPLIFY: explain the same answer so an 8-year-old would get it. Short sentences, an everyday comparison, no jargon.",
   deeper: "GO DEEPER: give a richer answer with more detail, the why behind it, and 4 to 6 extra facts. Up to 4 paragraphs.",
+  double: "DOUBLE LENGTH: give the same answer at about twice the length of the answer already shown: more explanation, more examples, and 4 to 6 facts. 4 to 6 paragraphs.",
+  followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
 function rankingRules(size) {
@@ -222,7 +226,7 @@ function salvage(text) {
     const plain = text.replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").trim();
     return { type: "answer", title: "Here's your answer", answer: plain, facts: [], items: [], explore: "", partial: true };
   }
-  return { type: type || (items.length ? "list" : "answer"), title, answer, facts, items, explore: str("explore"), partial: true };
+  return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, facts, items, explore: str("explore"), partial: true };
 }
 
 function parseCard(text) {
@@ -235,6 +239,7 @@ function parseCard(text) {
   if (!card) card = salvage(start !== -1 ? text.slice(start) : text);
   card.type = ["answer", "list", "redirect"].includes(card.type) ? card.type : "answer";
   card.title = String(card.title || "Here's your answer");
+  card.question = String(card.question || "").slice(0, 300);
   card.answer = String(card.answer || "");
   card.facts = Array.isArray(card.facts) ? card.facts.map(String).filter(Boolean).slice(0, 8) : [];
   card.items = Array.isArray(card.items)
@@ -272,11 +277,15 @@ export default async function handler(req, res) {
 
   if (question.length < 2) return res.status(400).json({ error: "Please type a question." });
 
-  // 1) Cached answers are instant and cost nothing
-  const cacheKey = kind === "ranking"
-    ? `amp:cache:v2:rank:${size}:${normalize(question)}`
-    : `amp:cache:v2:q:${door}:${mode}:${normalize(question)}`;
-  const cached = await redis(["GET", cacheKey]);
+  const followup = String(body.followup || "").trim().slice(0, 300);
+  if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
+  const keyFor = (q) => kind === "ranking"
+    ? `amp:cache:v2:rank:${size}:${normalize(q)}`
+    : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
+
+  // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
+  const cacheKey = mode === "followup" ? null : keyFor(question);
+  const cached = cacheKey ? await redis(["GET", cacheKey]) : null;
   if (cached) {
     try { return res.status(200).json({ card: JSON.parse(cached), cached: true }); } catch { /* fall through */ }
   }
@@ -288,8 +297,9 @@ export default async function handler(req, res) {
 
   // 3) Limits
   const day = today();
-  const limit = kind === "ranking" ? DAILY_LISTS : DAILY_QUESTIONS;
-  const tag = kind === "ranking" ? "r" : "q";
+  const isList = kind === "ranking" && mode !== "followup";
+  const limit = isList ? DAILY_LISTS : DAILY_QUESTIONS;
+  const tag = isList ? "r" : "q";
   const ipKey = `amp:${tag}:ip:${ip}:${day}`;
   const visKey = visitor ? `amp:${tag}:v:${visitor}:${day}` : null;
   const globalKey = `amp:global:${day}`;
@@ -303,7 +313,7 @@ export default async function handler(req, res) {
   }
   if (Math.max(Number(ipCount || 0), Number(visCount || 0)) >= limit) {
     return res.status(429).json({
-      error: kind === "ranking"
+      error: isList
         ? "That's all the Ranking Research for today. Come back tomorrow for more lists!"
         : "Mr. Paul needs a break! Come back tomorrow for more answers.",
     });
@@ -312,7 +322,21 @@ export default async function handler(req, res) {
   // 4) Ask Mr. Paul
   try {
     let text;
-    if (kind === "ranking") {
+    const prev = String(body.previous || "").slice(0, 2500);
+    if (mode === "followup") {
+      const user = [
+        kind === "ranking" ? `Original Ranking Research topic: ${question}` : `Original question (${door.toUpperCase()} door): ${question}`,
+        prev ? `The answer already shown was:\n${prev}` : "",
+        `Follow-up or clarification: ${followup}`,
+      ].filter(Boolean).join("\n\n");
+      text = await askClaude({
+        model: MODEL,
+        system: `${BASE_RULES}\n\n${MODE_GUIDE.followup}`,
+        user,
+        maxTokens: 2200,
+        maxSearches: 2,
+      });
+    } else if (kind === "ranking") {
       text = await askClaude({
         model: RANKING_MODEL,
         system: rankingRules(size),
@@ -321,7 +345,6 @@ export default async function handler(req, res) {
         maxSearches: 4,
       });
     } else {
-      const prev = String(body.previous || "").slice(0, 2000);
       const user = [
         `Door: ${door.toUpperCase()}`,
         `Question: ${question}`,
@@ -331,7 +354,7 @@ export default async function handler(req, res) {
         model: MODEL,
         system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}`,
         user,
-        maxTokens: mode === "deeper" ? 3200 : 2200,
+        maxTokens: mode === "double" ? 4500 : mode === "deeper" ? 3200 : 2200,
         maxSearches: 2,
       });
     }
@@ -340,8 +363,13 @@ export default async function handler(req, res) {
     await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]);
     const partial = !!card.partial;
     delete card.partial;
-    if (card.type !== "redirect" && !partial) {
-      await redis(["SET", cacheKey, JSON.stringify(card), "EX", kind === "ranking" ? 604800 : 1209600]);
+    if (cacheKey && card.type !== "redirect" && !partial) {
+      const ttl = kind === "ranking" ? 604800 : 1209600;
+      const saves = [redis(["SET", cacheKey, JSON.stringify(card), "EX", ttl])];
+      // Also save under the corrected spelling, so the clean version of the question is instant next time
+      const fixedKey = card.question ? keyFor(card.question) : null;
+      if (fixedKey && fixedKey !== cacheKey) saves.push(redis(["SET", fixedKey, JSON.stringify(card), "EX", ttl]));
+      await Promise.all(saves);
     }
     return res.status(200).json({ card });
   } catch (e) {
