@@ -187,6 +187,44 @@ async function askClaude({ model, system, user, maxTokens, maxSearches }) {
   return text;
 }
 
+function unescapeJson(s) {
+  s = s.replace(/\\+$/, "");
+  try { return JSON.parse('"' + s + '"'); } catch { return s.replace(/\\n/g, "\n").replace(/\\"/g, '"'); }
+}
+
+// Pull readable parts out of a reply that isn't clean JSON (for example, cut off mid-way)
+function salvage(text) {
+  const str = (key) => {
+    const m = text.match(new RegExp('"' + key + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)'));
+    return m ? unescapeJson(m[1]) : "";
+  };
+  const done = (block) => {
+    const out = [];
+    const re = /"((?:[^"\\]|\\.)*)"\s*[,\]]/g;
+    let m;
+    while ((m = re.exec(block))) out.push(unescapeJson(m[1]));
+    return out;
+  };
+  const type = str("type");
+  const title = str("title");
+  const answer = str("answer");
+  let facts = [];
+  const fi = text.indexOf('"facts"');
+  if (fi !== -1) {
+    const after = text.slice(text.indexOf("[", fi) + 1);
+    facts = done(after.split("]")[0] + (after.includes("]") ? "]" : ""));
+  }
+  const items = [];
+  const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+  let im;
+  while ((im = itemRe.exec(text))) items.push({ name: unescapeJson(im[1]), reason: unescapeJson(im[2]) });
+  if (!answer && !items.length) {
+    const plain = text.replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").trim();
+    return { type: "answer", title: "Here's your answer", answer: plain, facts: [], items: [], explore: "", partial: true };
+  }
+  return { type: type || (items.length ? "list" : "answer"), title, answer, facts, items, explore: str("explore"), partial: true };
+}
+
 function parseCard(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -194,13 +232,11 @@ function parseCard(text) {
   if (start !== -1 && end > start) {
     try { card = JSON.parse(text.slice(start, end + 1)); } catch { card = null; }
   }
-  if (!card) {
-    card = { type: "answer", title: "Here's your answer", answer: text.trim(), facts: [], items: [], explore: "" };
-  }
+  if (!card) card = salvage(start !== -1 ? text.slice(start) : text);
   card.type = ["answer", "list", "redirect"].includes(card.type) ? card.type : "answer";
   card.title = String(card.title || "Here's your answer");
   card.answer = String(card.answer || "");
-  card.facts = Array.isArray(card.facts) ? card.facts.map(String).slice(0, 8) : [];
+  card.facts = Array.isArray(card.facts) ? card.facts.map(String).filter(Boolean).slice(0, 8) : [];
   card.items = Array.isArray(card.items)
     ? card.items.filter((i) => i && i.name).map((i) => ({ name: String(i.name), reason: String(i.reason || "") }))
     : [];
@@ -238,8 +274,8 @@ export default async function handler(req, res) {
 
   // 1) Cached answers are instant and cost nothing
   const cacheKey = kind === "ranking"
-    ? `amp:cache:rank:${size}:${normalize(question)}`
-    : `amp:cache:q:${door}:${mode}:${normalize(question)}`;
+    ? `amp:cache:v2:rank:${size}:${normalize(question)}`
+    : `amp:cache:v2:q:${door}:${mode}:${normalize(question)}`;
   const cached = await redis(["GET", cacheKey]);
   if (cached) {
     try { return res.status(200).json({ card: JSON.parse(cached), cached: true }); } catch { /* fall through */ }
@@ -281,7 +317,7 @@ export default async function handler(req, res) {
         model: RANKING_MODEL,
         system: rankingRules(size),
         user: `Topic: ${question}\nList size: ${size}`,
-        maxTokens: size <= 25 ? 3000 : size <= 50 ? 5000 : 8000,
+        maxTokens: size <= 25 ? 4000 : size <= 50 ? 6500 : 12000,
         maxSearches: 4,
       });
     } else {
@@ -295,14 +331,16 @@ export default async function handler(req, res) {
         model: MODEL,
         system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}`,
         user,
-        maxTokens: mode === "deeper" ? 1800 : 1100,
+        maxTokens: mode === "deeper" ? 3200 : 2200,
         maxSearches: 2,
       });
     }
     const card = parseCard(text);
 
     await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]);
-    if (card.type !== "redirect") {
+    const partial = !!card.partial;
+    delete card.partial;
+    if (card.type !== "redirect" && !partial) {
       await redis(["SET", cacheKey, JSON.stringify(card), "EX", kind === "ranking" ? 604800 : 1209600]);
     }
     return res.status(200).json({ card });
