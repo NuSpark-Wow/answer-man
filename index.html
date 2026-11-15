@@ -700,13 +700,15 @@
     var items = card.items, n = items.length;
     var cols = n > 16 ? 5 : n > 9 ? 4 : 3, rows = Math.ceil(n / cols);
     var chrono = card.order === "chronological";
-    var title = (n + " " + topic + (chrono ? " Through the Years" : " A to Z")).toUpperCase();
+    var rng = "", m = topic.match(/\s*\(([^)]*)\)\s*$/);
+    if (m){ rng = m[1]; topic = topic.slice(0, m.index).trim(); }
+    var title = (n + " " + topic + (chrono ? " Through the Years" : " A to Z") + (rng ? " (" + rng + ")" : "")).toUpperCase();
     var lines = [];
     lines.push("Create a vertical infographic image, 1080 x 1350 pixels (4:5 portrait), for social media sharing.");
     lines.push("");
     lines.push('TITLE BANNER (top): "' + title + '" in bold retro poster lettering on a warm cream background with a gold and deep-teal banner. Small subtitle under it: "' + (chrono ? 'In time order, oldest first. No #1, just what keeps showing up.' : 'Listed A to Z. No #1, just what keeps showing up.') + '"');
     lines.push("");
-    lines.push("LAYOUT: A grid of " + n + " equal square tiles, " + cols + " across and " + rows + " down" + (n % cols ? ", with the last row centered" : "") + ". Thin dark borders between tiles. Each tile has a small round number badge in the top-left corner (1 to " + n + ") and the item name' + (chrono ? ' with its year underneath' : '') + ' in clear, bold, easy-to-read text across the top of the tile. The illustration fills the rest of the tile.");
+    lines.push("LAYOUT: A grid of " + n + " equal square tiles, " + cols + " across and " + rows + " down" + (n % cols ? ", with the last row centered" : "") + ". Thin dark borders between tiles. Each tile has a small round number badge in the top-left corner (1 to " + n + ") and the item name" + (chrono ? " with its year underneath" : "") + " in clear, bold, easy-to-read text across the top of the tile. The illustration fills the rest of the tile.");
     lines.push("");
     lines.push("STYLE: Detailed cartoon-realistic illustrations with bright, warm vintage colors and soft shading. Keep one consistent style across every tile. Everything must be readable on a phone screen.");
     lines.push("");
@@ -717,6 +719,7 @@
     });
     lines.push("");
     lines.push("RULES: Every illustration must be an original, generic design. No real brand logos, sponsor decals, team names or colors, racing numbers, product packaging, real people's faces, copyrighted characters, or copies of real covers or artwork. Do not add any text except the title, the item names, the numbers and the footer. Spell every item name exactly as written above.");
+    if (chrono) lines.push("CHECK BEFORE FINISHING: every year on every tile must match the list above exactly. Do not change or guess any year.");
     lines.push("");
     lines.push('FOOTER (bottom strip): A dark gold bar with clean white text: "Made with The Answer Man · Ask Mr. Paul — nusparklearnwow.com". Make the website large enough to read on a phone.');
     lines.push('Tiny line under the footer: "Names belong to their respective owners. Not affiliated or endorsed."');
