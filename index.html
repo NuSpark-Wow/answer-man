@@ -111,7 +111,7 @@
   .range.active{background:var(--cream);color:var(--ink);border-color:var(--cream)}
   .range.active::before{content:"✓ ";font-weight:800}
   #rangeOther{font:500 14px 'Inter';padding:8px 12px;border-radius:999px;border:2px solid rgba(0,0,0,.25);background:var(--cream);color:var(--ink);outline:none;width:210px}
-  #rangeOther[hidden]{display:none}
+  #rangeOther.off{visibility:hidden;pointer-events:none}
 
   /* ---------- Answer card ---------- */
   #out{margin-top:22px;flex:1}
@@ -291,7 +291,7 @@
           <button type="button" class="range" data-range="Last 100 years">Last 100 years</button>
           <button type="button" class="range" data-range="Last 50 years">Last 50 years</button>
           <button type="button" class="range" data-range="other">Other</button>
-          <input id="rangeOther" maxlength="60" hidden aria-label="Your time range (for example: the 1990s, or since 2000)">
+          <input id="rangeOther" class="off" maxlength="60" tabindex="-1" aria-label="Your time range (for example: the 1990s, or since 2000)">
         </div>
         <form class="ask" id="rForm" autocomplete="off">
           <input id="rInput" maxlength="200" aria-label="List topic">
@@ -400,7 +400,7 @@
       setActive(".door","data-door",state.door);
       var inp = document.getElementById("qInput");
       inp.value = "";
-      inp.focus();
+      inp.focus({ preventScroll:true });
     });
   });
   document.querySelectorAll(".size").forEach(function(b){
@@ -411,8 +411,10 @@
       state.range = b.dataset.range;
       setActive(".range","data-range",state.range);
       var other = document.getElementById("rangeOther");
-      other.hidden = state.range !== "other";
-      if (!other.hidden) other.focus();
+      var on = state.range === "other";
+      other.classList.toggle("off", !on);
+      other.tabIndex = on ? 0 : -1;
+      if (on) other.focus({ preventScroll:true });
     });
   });
   function currentRange(){
@@ -423,13 +425,13 @@
   document.getElementById("qForm").addEventListener("submit", function(e){
     e.preventDefault();
     var q = document.getElementById("qInput").value.trim();
-    if (!q) { document.getElementById("qInput").focus(); return; }
+    if (!q) { document.getElementById("qInput").focus({ preventScroll:true }); return; }
     ask({ kind:"question", question:q, door:state.door, mode:"normal" });
   });
   document.getElementById("rForm").addEventListener("submit", function(e){
     e.preventDefault();
     var q = document.getElementById("rInput").value.trim();
-    if (!q) { document.getElementById("rInput").focus(); return; }
+    if (!q) { document.getElementById("rInput").focus({ preventScroll:true }); return; }
     ask({ kind:"ranking", question:q, size:state.size, range:currentRange() });
   });
 
@@ -469,7 +471,7 @@
       if (stopBtn) stopBtn.addEventListener("click", function(){
         stopped = true; if (ctrl) ctrl.abort(); setBusy(false);
         out.innerHTML = '<div class="notice">Stopped. Change your topic, size or time range, then tap Research.</div>';
-        document.getElementById("rInput").focus();
+        document.getElementById("rInput").focus({ preventScroll:true });
       });
     }
     getToken().then(function(token){
@@ -602,7 +604,7 @@
     document.getElementById("rInput").value = "";
     state.lastQ = null; state.lastAnswer = "";
     welcome();
-    document.getElementById(state.tab === "ranking" ? "rInput" : "qInput").focus();
+    document.getElementById(state.tab === "ranking" ? "rInput" : "qInput").focus({ preventScroll:true });
   }
 
   function render(card, payload, cached){
@@ -650,7 +652,7 @@
     document.getElementById("fForm").addEventListener("submit", function(e){
       e.preventDefault();
       var f = document.getElementById("fInput").value.trim();
-      if (!f || !state.lastQ){ document.getElementById("fInput").focus(); return; }
+      if (!f || !state.lastQ){ document.getElementById("fInput").focus({ preventScroll:true }); return; }
       document.getElementById("fInput").value = "";
       var base = state.lastQ;
       ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, range:base.range, mode:"followup", followup:f, previous:state.lastAnswer });
@@ -708,7 +710,7 @@
  if(window.self===window.top)return;
  document.documentElement.classList.add('lw-embed');
  var last=0;
- function h(){var v=Math.ceil(document.body.offsetHeight);if(Math.abs(v-last)>2){last=v;parent.postMessage({lwToolHeight:v},'*');}}
+ var tmr=null;function send(){var v=Math.ceil(document.body.offsetHeight);if(Math.abs(v-last)>8){last=v;parent.postMessage({lwToolHeight:v},'*');}}function h(){clearTimeout(tmr);tmr=setTimeout(send,120);}
  if(window.ResizeObserver)new ResizeObserver(h).observe(document.body);
  setInterval(h,1000);window.addEventListener('load',h);h();
 })();
