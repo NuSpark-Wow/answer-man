@@ -47,6 +47,7 @@ RULES
 9. Accuracy first. If you are not sure, say so plainly. Use web search only when the answer depends on current or recent information.
 10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **).
 11. Spelling: people type fast. Silently read past typos, misspellings, and grammar slips, and answer what they meant. Never point out or comment on their mistakes.
+12. Unclear questions: if a question could reasonably mean very different things (for example "Mercury" could be the planet, the element, the Roman god, or Freddie Mercury), answer the most likely meaning and list up to 3 other meanings in "alternatives", each written as a full question. For clear questions, leave "alternatives" empty. Don't use it for small variations.
 
 OUTPUT
 Reply with ONLY one JSON object, nothing before or after it:
@@ -57,6 +58,7 @@ Reply with ONLY one JSON object, nothing before or after it:
   "answer": "the answer — 1 to 3 short paragraphs separated by \\n\\n (for a list: the one-line opening sentence)",
   "facts": ["2 to 4 short key facts or wow facts"] ,
   "items": [{"name": "...", "reason": "one line"}],
+  "alternatives": ["up to 3 other meanings as full questions, only when the question is truly unclear; otherwise empty"],
   "explore": "one name from this list that fits the question best, or empty string: ${EXPERIENCES.join(" | ")}"
 }
 Use "items" only for type "list" (otherwise an empty array). "facts" may be empty for redirects.`;
@@ -78,16 +80,39 @@ const MODE_GUIDE = {
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
-function rankingRules(size, range) {
+// Turn "Last 50 years", "past 25 years", "since 1990", "the 1980s", "1970-1985" into [from, to] years
+function parseRange(range) {
+  const Y = new Date().getFullYear();
+  const r = String(range || "").toLowerCase();
+  if (!r || r === "all time") return null;
+  let m;
+  if ((m = r.match(/(?:last|past|previous)\s+(\d{1,3})\s+years?/))) return [Y - parseInt(m[1], 10), Y];
+  if ((m = r.match(/(?:last|past|previous)\s+(decade|century)/))) return [Y - (m[1] === "decade" ? 10 : 100), Y];
+  if ((m = r.match(/(\d{4})\s*(?:-|–|to|through|and)\s*(\d{4})/))) return [parseInt(m[1], 10), parseInt(m[2], 10)];
+  if ((m = r.match(/(?:since|after|from)\s+(\d{4})/))) return [parseInt(m[1], 10), Y];
+  if ((m = r.match(/(?:before|until|up to)\s+(\d{4})/))) return [0, parseInt(m[1], 10)];
+  if ((m = r.match(/(\d{4})s/))) { const d = parseInt(m[1], 10); return [d, d + 9]; }
+  if ((m = r.match(/'(\d0)s/))) { const d = 1900 + parseInt(m[1], 10); return [d, d + 9]; }
+  if ((m = r.match(/\b(\d{4})\b/))) return [parseInt(m[1], 10), parseInt(m[1], 10)];
+  return null;
+}
+
+function rankingRules(size, range, bounds) {
   return `${BASE_RULES}
 
 RANKING RESEARCH MODE
 The person picked a topic and wants a list of ${size}.
-Time range: ${range}. Only include items from that time range (for people, count their career or active years). If a time range doesn't make sense for the topic (for example, beaches or national parks), ignore it.
+Time range: ${range}${bounds ? ` (that means ${bounds[0]} to ${bounds[1]})` : ""}.
+TIME RANGE RULES — the person's time range always wins over your own idea of the topic:
+- Only include items released, made, founded, or active within that range. For people, their career or active years must overlap it.
+- Never drop the range because the topic suggests an era. Example: "classic rock songs" with "past 25 years" means classic-rock-style songs released in that window, not the 1960s and 70s classics.
+- If few items truly fit, return fewer and say so in one short sentence at the start of "answer".
+- Only ignore the range for timeless things with no date, like beaches, mountains, or national parks.
+- For every item, include "from" and "to" years (numbers): release year for songs, films, books, inventions (from = to); first and last active year for people, teams, and bands. Use null only for timeless things.
 Ignore words in the topic like "top", "best", "greatest" or a number; treat the topic as the subject only. Mr. Paul never picks a #1. Instead, research what shows up most often across published rankings and lists for this topic (use web search), and return exactly ${size} items (or fewer if the topic truly has fewer) as type "list".
 - "title": "Ranking Research: <topic>" — add the time range in parentheses unless it's all time or doesn't apply
 - "answer": "What shows up most across published rankings, listed A–Z. Mr. Paul doesn't pick a #1."
-- "items": in A–Z order; each "reason" is ONE short line (about 12 words max) saying why it keeps making the lists. No numbers, no "#1", no superlatives in your own voice.
+- "items": [{"name": "...", "reason": "...", "from": 1999, "to": 2005}] in A–Z order; each "reason" is ONE short line (about 12 words max) saying why it keeps making the lists. No numbers, no "#1", no superlatives in your own voice.
 - "facts": 1 or 2 short notes on what kinds of sources were looked at (no links).
 - Companies, brands, products, and businesses are NOT allowed as a list topic (rule 2). If the topic is one, return type "redirect" and suggest a knowledge topic instead.`;
 }
@@ -221,9 +246,9 @@ function salvage(text) {
     facts = done(after.split("]")[0] + (after.includes("]") ? "]" : ""));
   }
   const items = [];
-  const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+  const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"from"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"to"\s*:\s*(null|-?\d+)\s*)?\}/g;
   let im;
-  while ((im = itemRe.exec(text))) items.push({ name: unescapeJson(im[1]), reason: unescapeJson(im[2]) });
+  while ((im = itemRe.exec(text))) items.push({ name: unescapeJson(im[1]), reason: unescapeJson(im[2]), from: im[3] && im[3] !== "null" ? +im[3] : null, to: im[4] && im[4] !== "null" ? +im[4] : null });
   if (!answer && !items.length) {
     const plain = text.replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").trim();
     return { type: "answer", title: "Here's your answer", answer: plain, facts: [], items: [], explore: "", partial: true };
@@ -245,11 +270,18 @@ function parseCard(text) {
   card.answer = String(card.answer || "");
   card.facts = Array.isArray(card.facts) ? card.facts.map(String).filter(Boolean).slice(0, 8) : [];
   card.items = Array.isArray(card.items)
-    ? card.items.filter((i) => i && i.name).map((i) => ({ name: String(i.name), reason: String(i.reason || "") }))
+    ? card.items.filter((i) => i && i.name).map((i) => ({
+        name: String(i.name), reason: String(i.reason || ""),
+        from: Number.isFinite(+i.from) && i.from !== null ? +i.from : null,
+        to: Number.isFinite(+i.to) && i.to !== null ? +i.to : null,
+      }))
     : [];
   // Enforce the no-ranking rule: lists are always A–Z
   card.items.sort((a, b) => sortKey(a.name).localeCompare(sortKey(b.name)));
   card.explore = EXPERIENCES.includes(card.explore) ? card.explore : "";
+  card.alternatives = Array.isArray(card.alternatives)
+    ? card.alternatives.map((x) => String(x).trim()).filter((x) => x.length > 2).slice(0, 3)
+    : [];
   return card;
 }
 
@@ -283,7 +315,7 @@ export default async function handler(req, res) {
   const followup = String(body.followup || "").trim().slice(0, 300);
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
-    ? `amp:cache:v2:rank:${size}:${normalize(range)}:${normalize(q)}`
+    ? `amp:cache:v3:rank:${size}:${normalize(range)}:${normalize(q)}`
     : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
@@ -342,7 +374,7 @@ export default async function handler(req, res) {
     } else if (kind === "ranking") {
       text = await askClaude({
         model: RANKING_MODEL,
-        system: rankingRules(size, range),
+        system: rankingRules(size, range, parseRange(range)),
         user: `Topic: ${question}\nList size: ${size}\nTime range: ${range}`,
         maxTokens: size <= 25 ? 4000 : size <= 50 ? 6500 : 12000,
         maxSearches: 4,
@@ -362,6 +394,24 @@ export default async function handler(req, res) {
       });
     }
     const card = parseCard(text);
+
+    // Double-check the time range: drop any list item dated outside it
+    const bounds = kind === "ranking" && mode !== "followup" ? parseRange(range) : null;
+    if (bounds && card.items.length) {
+      const [lo, hi] = bounds;
+      const before = card.items.length;
+      card.items = card.items.filter((i) => {
+        const f = i.from ?? i.to, tt = i.to ?? i.from;
+        if (f === null || f === undefined) return true;
+        return tt >= lo && f <= hi;
+      });
+      const dropped = before - card.items.length;
+      if (dropped > 0 && card.items.length < Math.min(size, before) * 0.6) {
+        card.answer = `Only ${card.items.length} strong matches turned up for ${range.toLowerCase()} (${lo}–${hi}). ` + card.answer;
+      }
+      if (!/\(/.test(card.title)) card.title += ` (${range.toLowerCase()})`;
+    }
+    card.items = card.items.map(({ name, reason }) => ({ name, reason }));
 
     await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]);
     const partial = !!card.partial;
