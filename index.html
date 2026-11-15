@@ -97,7 +97,8 @@
   .go:disabled{opacity:.6;cursor:wait}
   .hint{font-size:13px;color:var(--cream-dim);margin-top:8px;text-align:center;opacity:.9}
 
-  .sizes{display:flex;justify-content:center;gap:8px;margin:0 0 14px}
+  .sizes{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:0 0 14px}
+  .sizes .lbl{font:600 12px 'Inter';letter-spacing:.1em;text-transform:uppercase;color:var(--cream-dim);margin-right:2px}
   .size{
     font:700 14px 'Inter';padding:9px 18px;border-radius:10px;cursor:pointer;color:#1d1f23;
     background:linear-gradient(180deg,#eef0f3,var(--silver-3));border:1px solid #2a2d33
@@ -296,6 +297,7 @@
       <!-- Ranking mode -->
       <section id="rPanel" hidden>
         <div class="sizes" id="sizes">
+          <span class="lbl">Ranking Count</span>
           <button class="size active" data-size="25">25</button>
           <button class="size" data-size="50">50</button>
           <button class="size" data-size="100">100</button>
