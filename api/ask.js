@@ -284,7 +284,7 @@ export default async function handler(req, res) {
     : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
-  const cacheKey = mode === "followup" ? null : keyFor(question);
+  const cacheKey = (mode === "followup" || body.noCache) ? null : keyFor(question);
   const cached = cacheKey ? await redis(["GET", cacheKey]) : null;
   if (cached) {
     try { return res.status(200).json({ card: JSON.parse(cached), cached: true }); } catch { /* fall through */ }
