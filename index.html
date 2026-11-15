@@ -134,6 +134,18 @@
   .explore a{color:var(--gold-hi);font-weight:600;text-decoration:none}
   .explore a:hover{text-decoration:underline}
   .cached{font-size:11px;opacity:.6;margin-left:6px}
+  .asked{font-size:13px;color:var(--cream-dim);margin:-2px 0 6px;font-style:italic}
+  .asked b{font-style:normal;color:var(--cream)}
+  #thread .card{margin-top:14px;border-left:4px solid var(--gold-hi)}
+  #thread .thinking{padding:14px 4px}
+  .follow{display:flex;gap:10px;margin-top:16px}
+  .follow input{flex:1;font:500 15px 'Inter';padding:12px 14px;border-radius:10px;border:2px solid rgba(0,0,0,.25);background:var(--cream);color:var(--ink);outline:none}
+  .follow input:focus{border-color:var(--gold-hi);box-shadow:0 0 0 3px rgba(217,180,90,.35)}
+  .follow button{font:700 14px 'Inter';padding:0 18px;border-radius:10px;cursor:pointer;border:1px solid #1d1f23;background:linear-gradient(180deg,var(--silver-2),var(--silver-1));color:var(--cream)}
+  .follow button:disabled{opacity:.6;cursor:wait}
+  .follow-label{font-size:13px;color:var(--cream-dim);margin-top:18px}
+  .notice.small{margin-top:14px;font-size:15px}
+  @media (max-width:720px){ .follow{flex-direction:column} .follow button{padding:12px} }
 
   .thinking{display:flex;align-items:center;gap:12px;font-size:16px;color:var(--cream);padding:18px 4px}
   .dots span{display:inline-block;width:9px;height:9px;margin-right:4px;border-radius:50%;background:var(--gold-hi);animation:b 1s infinite}
@@ -390,18 +402,28 @@
   // ---------- Ask ----------
   function setBusy(b){
     state.busy = b;
-    ["qGo","rGo"].forEach(function(id){ document.getElementById(id).disabled = b; });
+    ["qGo","rGo","fGo"].forEach(function(id){ var el = document.getElementById(id); if (el) el.disabled = b; });
     document.querySelectorAll(".act").forEach(function(a){ a.disabled = b; });
   }
   function ask(payload){
     if (state.busy) return;
     setBusy(true);
-    var msg = payload.kind === "ranking" ? (payload.size >= 50 ? "Mr. Paul is checking the published rankings… a list of " + payload.size + " can take a minute or two." : "Mr. Paul is checking the published rankings…")
+    var isFollow = payload.mode === "followup";
+    var msg = isFollow ? "Mr. Paul is thinking about your follow-up…" : payload.kind === "ranking" ? (payload.size >= 50 ? "Mr. Paul is checking the published rankings… a list of " + payload.size + " can take a minute or two." : "Mr. Paul is checking the published rankings…")
             : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
             : payload.mode === "deeper" ? "Mr. Paul is digging deeper…"
+            : payload.mode === "double" ? "Mr. Paul is writing a longer answer…"
             : "Mr. Paul is looking that up…";
     lightUp(false);
-    out.innerHTML = '<div class="thinking"><span class="dots"><span></span><span></span><span></span></span>' + msg + '</div>';
+    var thinkHtml = '<span class="dots"><span></span><span></span><span></span></span>' + msg;
+    var thinkingEl = null;
+    if (isFollow){
+      thinkingEl = document.createElement("div"); thinkingEl.className = "thinking"; thinkingEl.innerHTML = thinkHtml;
+      document.getElementById("thread").appendChild(thinkingEl);
+      thinkingEl.scrollIntoView({ behavior:"smooth", block:"nearest" });
+    } else {
+      out.innerHTML = '<div class="thinking">' + thinkHtml + '</div>';
+    }
     getToken().then(function(token){
       payload.turnstileToken = token;
       payload.visitor = visitor;
@@ -410,15 +432,47 @@
       return r.json().then(function(j){ return { ok:r.ok, j:j }; });
     }).then(function(res){
       setBusy(false);
-      if (!res.ok || !res.j.card){ notice(res.j.error || "Something went wrong. Please try again."); return; }
-      if (payload.kind === "question") state.lastQ = payload;
+      if (!res.ok || !res.j.card){
+        var err = res.j.error || "Something went wrong. Please try again.";
+        if (isFollow){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; lightUp(true); }
+        else notice(err);
+        return;
+      }
+      if (isFollow){ thinkingEl.remove(); appendFollow(res.j.card, payload); return; }
+      state.lastQ = payload;
       render(res.j.card, payload, res.j.cached);
     }).catch(function(){
       setBusy(false);
-      notice("Mr. Paul couldn't connect. Please check your internet and try again.");
+      var err = "Mr. Paul couldn't connect. Please check your internet and try again.";
+      if (isFollow && thinkingEl){ thinkingEl.outerHTML = '<div class="notice small">' + esc(err) + '</div>'; }
+      else notice(err);
     });
   }
 
+  function cardText(card){
+    var t = card.answer || "";
+    if (card.items && card.items.length) t += "\n" + card.items.map(function(i){ return i.name + ": " + i.reason; }).join("\n");
+    if (card.facts && card.facts.length) t += "\n" + card.facts.join("\n");
+    return t.slice(0, 2500);
+  }
+  function appendFollow(card, payload){
+    var html = '<div class="card"><span class="badge">Follow-up</span>';
+    html += '<div class="asked">You asked: <b>' + esc(card.question || payload.followup) + '</b></div>';
+    if (card.title) html += '<h2>' + esc(card.title) + '</h2>';
+    String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
+    if (card.items && card.items.length){
+      html += '<ul class="list">'; card.items.forEach(function(it){ html += '<li><b>' + esc(it.name) + '</b><span>' + esc(it.reason) + '</span></li>'; }); html += '</ul>';
+    }
+    if (card.facts && card.facts.length){
+      html += '<ul class="facts">'; card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; }); html += '</ul>';
+    }
+    html += '</div>';
+    var thread = document.getElementById("thread");
+    thread.insertAdjacentHTML("beforeend", html);
+    state.lastAnswer = cardText(card);
+    lightUp(card.type !== "redirect");
+    thread.lastElementChild.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
   function lightUp(on){
     ["figRight","miniRight"].forEach(function(id){
       var el = document.getElementById(id); if (!el) return;
@@ -443,6 +497,7 @@
     var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size
               : payload.door.toUpperCase() + (payload.mode === "simplify" ? " · Simplified" : payload.mode === "deeper" ? " · Deeper" : "");
     var html = '<div class="card"><span class="badge">' + esc(badge) + '</span>' + (cached ? '<span class="cached">instant answer</span>' : '');
+    if (card.question && payload.kind === "question") html += '<div class="asked">You asked: <b>' + esc(card.question) + '</b></div>';
     html += '<h2>' + esc(card.title) + '</h2>';
     String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
     if (card.items && card.items.length){
@@ -459,6 +514,7 @@
     if (payload.kind === "question" && card.type !== "redirect"){
       if (payload.mode !== "simplify") html += '<button class="act" data-mode="simplify">Simplify</button>';
       if (payload.mode !== "deeper") html += '<button class="act" data-mode="deeper">Go Deeper</button>';
+      if (payload.mode !== "double") html += '<button class="act" data-mode="double">Double Length</button>';
       if (payload.mode !== "normal") html += '<button class="act" data-mode="normal">Original Answer</button>';
     }
     html += '<button class="act new">' + (payload.kind === "ranking" ? "New List" : "New Question") + '</button>';
@@ -467,9 +523,21 @@
       html += '<div class="explore">Want more? Try <a href="' + EXPLORE_LINKS[card.explore] + '" target="_top">' + esc(card.explore) + ' →</a></div>';
     }
     html += '</div>';
+    html += '<div id="thread"></div>';
+    html += '<div class="follow-label">Not quite right, or want to know more? Ask a follow-up.</div>' +
+            '<form class="follow" id="fForm" autocomplete="off"><input id="fInput" maxlength="300" aria-label="Follow-up or clarification"><button id="fGo" type="submit">Ask</button></form>';
     out.innerHTML = html;
+    if (card.question && payload.kind === "question" && payload.mode === "normal") document.getElementById("qInput").value = card.question;
     lightUp(card.type !== "redirect");
-    state.lastAnswer = card.answer || "";
+    state.lastAnswer = cardText(card);
+    document.getElementById("fForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      var f = document.getElementById("fInput").value.trim();
+      if (!f || !state.lastQ){ document.getElementById("fInput").focus(); return; }
+      document.getElementById("fInput").value = "";
+      var base = state.lastQ;
+      ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, mode:"followup", followup:f, previous:state.lastAnswer });
+    });
     out.querySelector(".act.new").addEventListener("click", newQuestion);
     out.querySelectorAll(".act[data-mode]").forEach(function(a){
       a.addEventListener("click", function(){
