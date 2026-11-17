@@ -24,7 +24,7 @@ const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS ||
 const R_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-const DOORS = ["who", "what", "where", "when", "why", "how"];
+const DOORS = ["who", "what", "where", "when", "why", "how", "evolution", "future"];
 const MODES = ["normal", "simplify", "deeper", "double", "followup"];
 const EXPERIENCES = [
   "Mr. Paul's Classroom", "The Lecture Hall", "Remember When", "How It Works",
@@ -70,6 +70,8 @@ const DOOR_GUIDE = {
   when: "WHEN door: give the date or time period, plus a mini timeline in the facts: what came before, the moment itself, what came after.",
   why: "WHY door: explain cause and effect, step by step, in plain language.",
   how: "HOW door: explain how it works or how it's done as clear steps, written as short sentences in the answer.",
+  evolution: "EVOLUTION door: tell the history of how the topic came to be and changed over time — anything from the cotton gin to the telephone to sneakers. Open the answer with a short 2-sentence overview, then walk through the story in time order: the original idea and its beginnings, the key people, the big turning points, the companies that got involved (as history only, never recommended), and how it expanded and spread to where it is today. Put the timeline in \"facts\" as 4 to 6 short milestones, oldest first, each starting with the year or era (for example \"1876 — Bell patents the telephone\"). Up to 4 short paragraphs.",
+  future: "FUTURE door: explain where the topic is heading — what experts predict and what is actually being planned, tested, or built (for example AI, healthcare, space travel, energy, transportation). Use web search for current plans, research, and announcements. Clearly separate what is already underway from what is only predicted, say roughly when things are expected, and present forecasts as possibilities, never certainties. Companies and organizations may be named only as fact (what they have announced or are building), never recommended. Put 3 to 5 short \"what to watch\" points in \"facts\". End the answer with one plain sentence reminding that predictions can change.",
 };
 
 const MODE_GUIDE = {
@@ -399,6 +401,7 @@ export default async function handler(req, res) {
     } else {
       const user = [
         `Door: ${door.toUpperCase()}`,
+        door === "future" ? `Today's date: ${new Date().toISOString().slice(0, 10)}. Search for current plans and forecasts before answering.` : "",
         `Question: ${question}`,
         mode !== "normal" && prev ? `The answer already shown was:\n${prev}` : "",
       ].filter(Boolean).join("\n\n");
@@ -407,7 +410,7 @@ export default async function handler(req, res) {
         system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}`,
         user,
         maxTokens: mode === "double" ? 4500 : mode === "deeper" ? 3200 : 2200,
-        maxSearches: 2,
+        maxSearches: door === "future" ? 4 : 2,
       });
     }
     const card = parseCard(text);
@@ -445,7 +448,7 @@ export default async function handler(req, res) {
     const partial = !!card.partial;
     delete card.partial;
     if (cacheKey && card.type !== "redirect" && !partial) {
-      const ttl = kind === "ranking" ? 604800 : 1209600;
+      const ttl = kind === "ranking" ? 604800 : door === "future" ? 259200 : 1209600; // Future answers refresh every 3 days
       const saves = [redis(["SET", cacheKey, JSON.stringify(card), "EX", ttl])];
       // Also save under the corrected spelling, so the clean version of the question is instant next time
       const fixedKey = card.question ? keyFor(card.question) : null;
