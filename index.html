@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Answer Man | Ask Mr. Paul | NuSpark Learn...Wow!</title>
-<meta name="description" content="The Answer Man. Ask Mr. Paul: Who, What, Where, When, Why, How. One clear answer. No ads, no clutter.">
+<meta name="description" content="The Answer Man. Ask Mr. Paul: Who, What, Where, When, Why, How, Evolution, Future. One clear answer. No ads, no clutter.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -68,7 +68,7 @@
   .tab.active{background:var(--cream);color:var(--ink);border-color:var(--cream)}
 
   /* ---------- Doors ---------- */
-  .doors{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+  .doors{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .door{
     font:700 15px 'Inter';letter-spacing:.03em;
     padding:12px 6px;border-radius:10px;cursor:pointer;color:#1d1f23;
@@ -127,6 +127,8 @@
   .facts{margin:6px 0 4px;padding:14px 16px;background:rgba(247,236,210,.1);border-radius:10px;list-style:none}
   .facts li{font-size:15px;line-height:1.5;padding:4px 0 4px 22px;position:relative}
   .facts li::before{content:"✦";position:absolute;left:0;color:var(--gold-hi)}
+  .fnote{margin:10px 0 4px;padding:10px 14px;border-left:3px solid var(--gold-hi);background:rgba(247,236,210,.06);border-radius:6px;font-size:13px;line-height:1.5;color:var(--cream-dim)}
+  .fnote b{color:var(--cream)}
   .list{list-style:none;columns:2;column-gap:28px;margin-top:6px}
   .list li{break-inside:avoid;padding:9px 0;border-bottom:1px solid rgba(247,236,210,.15)}
   .list b{display:block;font-size:16px;color:var(--cream)}
@@ -243,7 +245,8 @@
     body{padding:10px 6px 24px}
     .lid{padding:10px 10px 14px;border-radius:16px 16px 8px 8px}
     .screen{padding:20px 16px 16px;min-height:auto}
-    .doors{grid-template-columns:repeat(3,1fr)}
+    .doors{grid-template-columns:repeat(4,1fr);gap:7px}
+    .door{font-size:13px;padding:11px 2px;letter-spacing:0}
     .ask{flex-direction:column}
     .go{padding:14px}
     .list{columns:1}
@@ -287,6 +290,8 @@
           <button class="door" data-door="when">When</button>
           <button class="door" data-door="why">Why</button>
           <button class="door" data-door="how">How</button>
+          <button class="door" data-door="evolution">Evolution</button>
+          <button class="door" data-door="future">Future</button>
         </div>
         <form class="ask" id="qForm" autocomplete="off">
           <input id="qInput" maxlength="300" aria-label="Your question">
@@ -344,10 +349,12 @@
     "How It Works": SITE, "What's the Difference?": SITE, "The AI Encyclopedias": SITE,
     "Debate Me": SITE, "The Guess Room": SITE, "The Puzzle Parlor": SITE
   };
+  var FUTURE_NOTE = '<div class="fnote"><b>About the future:</b> these are plans and expert predictions, not guarantees. Timelines and outcomes can change.</div>';
   var PLACEHOLDERS = {
     who:"Who invented the telephone?", what:"What is a black hole?",
     where:"Where is the Great Barrier Reef?", when:"When did the Wright brothers first fly?",
-    why:"Why is the sky blue?", how:"How does a rainbow form?"
+    why:"Why is the sky blue?", how:"How does a rainbow form?",
+    evolution:"How did the telephone evolve?", future:"What's the future of AI in healthcare?"
   };
 
   var API = "/api/ask";
@@ -564,6 +571,7 @@
     if (card.facts && card.facts.length){
       html += '<ul class="facts">'; card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; }); html += '</ul>';
     }
+    if (state.lastQ && state.lastQ.door === "future" && card.type !== "redirect") html += FUTURE_NOTE;
     html += '<div class="actions">';
     if (card.type !== "redirect"){
       if (mode !== "simplify") html += '<button class="act" data-fmode="simplify">Simplify</button>';
@@ -641,6 +649,7 @@
       card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; });
       html += '</ul>';
     }
+    if (payload.kind === "question" && payload.door === "future" && card.type !== "redirect") html += FUTURE_NOTE;
     if (payload.kind === "question" && card.alternatives && card.alternatives.length){
       html += '<div class="alts"><span>Did you mean:</span>' + card.alternatives.map(function(a){ return '<button class="alt" type="button">' + esc(a) + '</button>'; }).join("") + '</div>';
     }
@@ -764,9 +773,9 @@
   function welcome(){
     lightUp(false);
     if (state.tab === "question"){
-      out.innerHTML = '<div class="welcome">Pick a door — <b>Who, What, Where, When, Why or How</b> — and ask anything.<br>One clear answer. No ads, no clutter.' +
+      out.innerHTML = '<div class="welcome">Pick a door — <b>Who, What, Where, When, Why, How, Evolution or Future</b> — and ask anything.<br>One clear answer. No ads, no clutter.' +
         '<div class="examples">' +
-        ['who|Who was Amelia Earhart?','what|What is photosynthesis?','where|Where is Machu Picchu?','when|When was the printing press invented?','why|Why do leaves change color?','how|How do airplanes stay in the air?']
+        ['who|Who was Amelia Earhart?','what|What is photosynthesis?','where|Where is Machu Picchu?','when|When was the printing press invented?','why|Why do leaves change color?','how|How do airplanes stay in the air?','evolution|How did the cotton gin change over time?','future|What is the future of space travel?']
           .map(function(x){ var p=x.split("|"); return '<button class="ex" data-door="'+p[0]+'">'+esc(p[1])+'</button>'; }).join("") +
         '</div></div>';
       out.querySelectorAll(".ex").forEach(function(b){
