@@ -775,7 +775,7 @@
     if (state.tab === "question"){
       out.innerHTML = '<div class="welcome">Pick a door — <b>Who, What, Where, When, Why, How, Evolution or Future</b> — and ask anything.<br>One clear answer. No ads, no clutter.' +
         '<div class="examples">' +
-        ['who|Who was Amelia Earhart?','what|What is photosynthesis?','where|Where is Machu Picchu?','when|When was the printing press invented?','why|Why do leaves change color?','how|How do airplanes stay in the air?','evolution|How did the bicycle change over time?','future|What is the future of space travel?']
+        ['who|Who was Amelia Earhart?','what|What is photosynthesis?','where|Where is Machu Picchu?','when|When was the printing press invented?','why|Why do leaves change color?','how|How do airplanes stay in the air?','evolution|How did the internet change over time?','future|What is the future of space travel?']
           .map(function(x){ var p=x.split("|"); return '<button class="ex" data-door="'+p[0]+'">'+esc(p[1])+'</button>'; }).join("") +
         '</div></div>';
       out.querySelectorAll(".ex").forEach(function(b){
