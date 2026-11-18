@@ -25,7 +25,8 @@ const R_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
 const DOORS = ["who", "what", "where", "when", "why", "how", "evolution", "future"];
-const MODES = ["normal", "simplify", "deeper", "double", "followup"];
+const MODES = ["normal", "simplify", "full", "extended", "followup"];
+const MODE_ALIAS = { deeper: "full", double: "extended" }; // older buttons
 const EXPERIENCES = [
   "Mr. Paul's Classroom", "The Lecture Hall", "Remember When", "How It Works",
   "What's the Difference?", "The AI Encyclopedias", "Debate Me", "The Guess Room",
@@ -55,12 +56,14 @@ Reply with ONLY one JSON object, nothing before or after it:
   "type": "answer" | "list" | "redirect",
   "question": "the person's question (or follow-up) restated with spelling and grammar quietly fixed",
   "title": "short title for the card",
-  "answer": "the answer — 1 to 3 short paragraphs separated by \\n\\n (for a list: the one-line opening sentence)",
-  "facts": ["2 to 4 short key facts or wow facts"] ,
+  "answer": "the answer — paragraphs separated by \\n\\n, at the length the mode asks for (for a list: the one-line opening sentence)",
+  "sections": [{"heading": "short subheadline", "text": "paragraphs separated by \\n\\n"}],
+  "facts": ["short highlight or interesting fact — how many depends on the length asked for"] ,
   "items": [{"name": "...", "reason": "one line"}],
   "alternatives": ["up to 3 other meanings as full questions, only when the question is truly unclear; otherwise empty"],
   "explore": "one name from this list that fits the question best, or empty string: ${EXPERIENCES.join(" | ")}"
 }
+Use "sections" only for Full Page and Extended answers (otherwise an empty array); when you use sections, "answer" is a 2-sentence opening summary and the rest goes in sections.
 Use "items" only for type "list" (otherwise an empty array). "facts" may be empty for redirects.`;
 
 const DOOR_GUIDE = {
@@ -70,15 +73,27 @@ const DOOR_GUIDE = {
   when: "WHEN door: give the date or time period, plus a mini timeline in the facts: what came before, the moment itself, what came after.",
   why: "WHY door: explain cause and effect, step by step, in plain language.",
   how: "HOW door: explain how it works or how it's done as clear steps, written as short sentences in the answer.",
-  evolution: "EVOLUTION door: tell the history of how the topic came to be and changed over time — anything from the cotton gin to the telephone to sneakers. Open the answer with a short 2-sentence overview, then walk through the story in time order: the original idea and its beginnings, the key people, the big turning points, the companies that got involved (as history only, never recommended), and how it expanded and spread to where it is today. Put the timeline in \"facts\" as 4 to 6 short milestones, oldest first, each starting with the year or era (for example \"1876 — Bell patents the telephone\"). Up to 4 short paragraphs.",
+  evolution: "EVOLUTION door: tell the history of how the topic came to be and changed over time — anything from the cotton gin to the telephone to sneakers. Open the answer with a short 2-sentence overview, then walk through the story in time order: the original idea and its beginnings, the key people, the big turning points, the companies that got involved (as history only, never recommended), and how it expanded and spread to where it is today. Put the timeline in \"facts\" as 4 to 6 short milestones, oldest first, each starting with the year or era (for example \"1876 — Bell patents the telephone\").",
   future: "FUTURE door: explain where the topic is heading — what experts predict and what is actually being planned, tested, or built (for example AI, healthcare, space travel, energy, transportation). Use web search for current plans, research, and announcements. Clearly separate what is already underway from what is only predicted, say roughly when things are expected, and present forecasts as possibilities, never certainties. Companies and organizations may be named only as fact (what they have announced or are building), never recommended. Put 3 to 5 short \"what to watch\" points in \"facts\". End the answer with one plain sentence reminding that predictions can change.",
 };
 
+// Subheadlines that fit each door, for Full Page and Extended answers
+const SECTION_GUIDE = {
+  who: "Good subheadlines: early life or beginnings, the big work or achievements, how they did it, challenges and turning points, influence and legacy, lesser-known facts.",
+  what: "Good subheadlines: what it is, how it works, where you see it in everyday life, its parts or types, why it matters, common misunderstandings.",
+  where: "Good subheadlines: where it is, what it's like (land, climate, look), history of the place, people and culture, what makes it notable, interesting details.",
+  when: "Good subheadlines: the date and setting, what led up to it, the moment itself, what happened next, why the timing mattered, how it's remembered.",
+  why: "Good subheadlines: the short answer, the main causes, how one thing led to another, the evidence, what it affects, common myths.",
+  how: "Good subheadlines: the big picture, then the steps or stages in order, the key parts or people involved, what makes it work, common problems, how it's done today.",
+  evolution: "Good subheadlines: the eras in time order — the original idea, the early versions, key people and turning points, the companies involved (history only), how it spread, where it is today.",
+  future: "Good subheadlines: where things stand today, what is being built or tested now, what experts predict, who is working on it (fact only), the challenges, a rough timeline.",
+};
+
 const MODE_GUIDE = {
-  normal: "Give one clear, straight answer for a general audience.",
-  simplify: "SIMPLIFY: explain the same answer so an 8-year-old would get it. Short sentences, an everyday comparison, no jargon.",
-  deeper: "GO DEEPER: give a richer answer with more detail, the why behind it, and 4 to 6 extra facts. Up to 4 paragraphs.",
-  double: "DOUBLE LENGTH: give the same answer at about twice the length of the answer already shown: more explanation, more examples, and 4 to 6 facts. 4 to 6 paragraphs.",
+  normal: "SUMMARY (half a page): one clear, solid answer for a general audience, 250 to 300 words in 3 paragraphs. Not skimpy: include the key names, dates, numbers and the how or why. No sections. Give 2 to 4 facts.",
+  simplify: "SIMPLIFY: explain it so an 8-year-old would get it, about 150 to 200 words. Short sentences, an everyday comparison, no jargon. No sections. Give 2 to 3 facts.",
+  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" is a 2-sentence opening summary; then 3 or 4 sections, each with a short subheadline and 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give exactly 3 facts as highlight bullets: interesting facts that are not just repeats of the text.",
+  extended: "EXTENDED (two pages): an in-depth reference answer of about 1,200 words. \"answer\" is a 2-sentence opening summary; then 6 to 8 sections, each with a short subheadline and 1 or 2 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give exactly 6 facts as highlight bullets: interesting facts that are not just repeats of the text.",
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
@@ -277,6 +292,9 @@ function parseCard(text) {
   card.question = String(card.question || "").slice(0, 300);
   card.answer = String(card.answer || "");
   card.facts = Array.isArray(card.facts) ? card.facts.map(String).filter(Boolean).slice(0, 8) : [];
+  card.sections = Array.isArray(card.sections)
+    ? card.sections.filter((x) => x && (x.heading || x.text)).map((x) => ({ heading: String(x.heading || "").slice(0, 120), text: String(x.text || "") })).slice(0, 10)
+    : [];
   card.items = Array.isArray(card.items)
     ? card.items.filter((i) => i && i.name).map((i) => ({
         name: String(i.name), reason: String(i.reason || ""),
@@ -322,7 +340,8 @@ export default async function handler(req, res) {
   const kind = body.kind === "ranking" ? "ranking" : "question";
   const question = String(body.question || "").trim().slice(0, 300);
   const door = DOORS.includes(body.door) ? body.door : "what";
-  const mode = MODES.includes(body.mode) ? body.mode : "normal";
+  const reqMode = MODE_ALIAS[body.mode] || body.mode;
+  const mode = MODES.includes(reqMode) ? reqMode : "normal";
   let size = parseInt(body.size, 10);
   if (!RANKING_SIZES.includes(size)) size = RANKING_SIZES[0] || 25;
   const range = String(body.range || "All time").replace(/[^\w\s,.'’()\-–]/g, "").trim().slice(0, 60) || "All time";
@@ -335,7 +354,7 @@ export default async function handler(req, res) {
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
     ? `amp:cache:v6:rank:${size}:${normalize(range)}:${normalize(q)}`
-    : `amp:cache:v2:q:${door}:${mode}:${normalize(q)}`;
+    : `amp:cache:v4:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
   const cacheKey = (mode === "followup" || body.noCache) ? null : keyFor(question);
@@ -376,7 +395,7 @@ export default async function handler(req, res) {
   // 4) Ask Mr. Paul
   try {
     let text;
-    const prev = String(body.previous || "").slice(0, 2500);
+    const prev = String(body.previous || "").slice(0, 6000);
     if (mode === "followup") {
       const user = [
         kind === "ranking" ? `Original Ranking Research topic: ${question} (time range: ${range})` : `Original question (${door.toUpperCase()} door): ${question}`,
@@ -403,13 +422,13 @@ export default async function handler(req, res) {
         `Door: ${door.toUpperCase()}`,
         door === "future" ? `Today's date: ${new Date().toISOString().slice(0, 10)}. Search for current plans and forecasts before answering.` : "",
         `Question: ${question}`,
-        mode !== "normal" && prev ? `The answer already shown was:\n${prev}` : "",
+        mode === "simplify" && prev ? `The answer already shown was:\n${prev}` : "",
       ].filter(Boolean).join("\n\n");
       text = await askClaude({
         model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}`,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] : ""}`,
         user,
-        maxTokens: mode === "double" ? 4500 : mode === "deeper" ? 3200 : 2200,
+        maxTokens: mode === "extended" ? 7000 : mode === "full" ? 4200 : 2600,
         maxSearches: door === "future" ? 4 : 2,
       });
     }
@@ -445,6 +464,7 @@ export default async function handler(req, res) {
     });
 
     await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]);
+    if (mode === "extended") await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]); // two-page answers count as 2
     const partial = !!card.partial;
     delete card.partial;
     if (cacheKey && card.type !== "redirect" && !partial) {
