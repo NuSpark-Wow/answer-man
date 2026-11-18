@@ -478,8 +478,7 @@
     var fIdx = (payload.followIndex === undefined) ? null : payload.followIndex;
     var msg = isFollow ? "Mr. Paul is thinking about your follow-up…" : payload.kind === "ranking" ? rankingReading(payload)
             : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
-            : payload.mode === "full" ? "Mr. Paul is writing a full page…"
-            : payload.mode === "extended" ? "Mr. Paul is writing two full pages… this one takes a little longer"
+            : payload.mode === "extended" ? "Mr. Paul is writing an extended answer… this one takes a little longer"
             : "Mr. Paul is looking that up…";
     lightUp(false);
     var thinkHtml = '<span class="dots"><span></span><span></span><span></span></span><span>' + msg + '</span>';
@@ -571,7 +570,7 @@
     if (card.facts && card.facts.length) t += "\n" + card.facts.join("\n");
     return t.slice(0, 14000);
   }
-  var MODE_LABEL = { normal:"", simplify:" · Simplified", full:" · Full Page", extended:" · Extended" };
+  var MODE_LABEL = { normal:"", simplify:" · Simplified", extended:" · Extended" };
   function paras(t, cls){ var h=""; String(t || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) h += '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(p.trim()) + '</p>'; }); return h; }
   function bodyHtml(card){
     var secs = card.sections && card.sections.length;
@@ -589,10 +588,27 @@
   function sizeButtons(mode, attr){
     var h = "";
     if (mode !== "simplify") h += '<button class="act" ' + attr + '="simplify">Simplify</button>';
-    if (mode !== "normal") h += '<button class="act" ' + attr + '="normal">Summary</button>';
-    if (mode !== "full") h += '<button class="act" ' + attr + '="full">Full Page</button>';
-    if (mode !== "extended") h += '<button class="act" ' + attr + '="extended">Extended (2 pages)</button>';
+    if (mode !== "normal") h += '<button class="act" ' + attr + '="normal">Full Answer</button>';
+    if (mode !== "extended") h += '<button class="act" ' + attr + '="extended">Extended</button>';
     return h;
+  }
+  // ---------- Copy for another AI tool ----------
+  function plainCard(card){
+    var t = "Review, double-check, and add relevant images.\n\n";
+    t += (card.title || "") + "\n";
+    if (card.question) t += "Question: " + card.question + "\n";
+    t += "\n" + String(card.answer || "").trim() + "\n";
+    (card.sections || []).forEach(function(x){ t += "\n" + (x.heading || "").toUpperCase() + "\n" + String(x.text || "").trim() + "\n"; });
+    (card.items || []).forEach(function(it){ t += "\n- " + it.name + (it.year ? " (" + it.year + ")" : "") + ": " + it.reason; });
+    if (card.facts && card.facts.length) t += "\n\nHIGHLIGHTS\n" + card.facts.map(function(f){ return "- " + f; }).join("\n");
+    t += "\n\nSource: The Answer Man (Ask Mr. Paul) at nusparklearnwow.com. AI can make mistakes, so double-check anything important.";
+    return t;
+  }
+  function copyCard(card, btn){
+    var text = plainCard(card);
+    var done = function(){ var old = btn.textContent; btn.textContent = "✓ Copied! Paste into any AI tool"; setTimeout(function(){ btn.textContent = old; }, 2600); };
+    var fallback = function(){ var ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly",""); ta.style.position = "fixed"; ta.style.top = "-1000px"; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch(e){} ta.remove(); done(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
   }
   // ---------- Print / Save as PDF ----------
   function printCard(card, door, mode){
@@ -633,6 +649,7 @@
     html += '<div class="actions">';
     if (card.type !== "redirect"){
       html += sizeButtons(mode, "data-fmode");
+      html += '<button class="act print copy" type="button">Copy for AI</button>';
       html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     html += '<button class="act new">New Question</button></div>';
@@ -640,7 +657,8 @@
   }
   function wireFollow(el, idx){
     el.querySelector(".act.new").addEventListener("click", newQuestion);
-    var pb = el.querySelector(".act.print"); if (pb) pb.addEventListener("click", function(){ var f = follows[idx]; printCard(f.card || {}, (state.lastQ || {}).door, f.mode || "normal"); });
+    var cb = el.querySelector(".act.copy"); if (cb) cb.addEventListener("click", function(){ copyCard(follows[idx].card || {}, cb); });
+    var pb = el.querySelector(".act.print:not(.copy)"); if (pb) pb.addEventListener("click", function(){ var f = follows[idx]; printCard(f.card || {}, (state.lastQ || {}).door, f.mode || "normal"); });
     el.querySelectorAll(".act[data-fmode]").forEach(function(b){
       b.addEventListener("click", function(){
         var f = follows[idx], base = state.lastQ || {};
@@ -680,7 +698,9 @@
   function notice(text){
     out.innerHTML = '<div class="notice">' + esc(text) + '</div><div class="actions"><button class="act new">' + (state.tab === "ranking" ? "New List" : "New Question") + '</button></div>';
     out.querySelector(".act.new").addEventListener("click", newQuestion);
-    var printBtn = out.querySelector(".card > .actions .act.print");
+    var printBtn = out.querySelector(".card > .actions .act.print:not(.copy)");
+    var copyBtn = out.querySelector(".card > .actions .act.copy");
+    if (copyBtn) copyBtn.addEventListener("click", function(){ copyCard(card, copyBtn); });
     if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
   }
   function newQuestion(){
@@ -706,6 +726,7 @@
     html += '<div class="actions">';
     if (payload.kind === "question" && card.type !== "redirect"){
       html += sizeButtons(payload.mode || "normal", "data-mode");
+      html += '<button class="act print copy" type="button">Copy for AI</button>';
       html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     var canInfo = payload.kind === "ranking" && payload.size === 25 && card.type === "list" && card.items && card.items.length >= 9;
@@ -734,7 +755,9 @@
       ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, range:base.range, mode:"followup", followup:f, previous:state.lastAnswer });
     });
     out.querySelector(".act.new").addEventListener("click", newQuestion);
-    var printBtn = out.querySelector(".card > .actions .act.print");
+    var printBtn = out.querySelector(".card > .actions .act.print:not(.copy)");
+    var copyBtn = out.querySelector(".card > .actions .act.copy");
+    if (copyBtn) copyBtn.addEventListener("click", function(){ copyCard(card, copyBtn); });
     if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
     var infoBtn = out.querySelector(".act.info");
     if (infoBtn) infoBtn.addEventListener("click", function(){ showInfographic(card, payload); });
