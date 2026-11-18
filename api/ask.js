@@ -46,7 +46,7 @@ RULES
 7. Health, legal, and money questions: give general educational information only, never personal advice, and say to check with a doctor, lawyer, or financial professional.
 8. Keep everything family-friendly. If a question is inappropriate or unsafe, return type "redirect" with a gentle, kind reply and a better question to ask.
 9. Accuracy first. If you are not sure, say so plainly. Use web search only when the answer depends on current or recent information.
-10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **).
+10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **), except the "## " subheadline lines that Full Page and Extended answers require.
 11. Spelling: people type fast. Silently read past typos, misspellings, and grammar slips, and answer what they meant. Never point out or comment on their mistakes.
 12. Unclear questions: if a question could reasonably mean very different things (for example "Mercury" could be the planet, the element, the Roman god, or Freddie Mercury), answer the most likely meaning and list up to 3 other meanings in "alternatives", each written as a full question. For clear questions, leave "alternatives" empty. Don't use it for small variations.
 
@@ -57,13 +57,12 @@ Reply with ONLY one JSON object, nothing before or after it:
   "question": "the person's question (or follow-up) restated with spelling and grammar quietly fixed",
   "title": "short title for the card",
   "answer": "the answer — paragraphs separated by \\n\\n, at the length the mode asks for (for a list: the one-line opening sentence)",
-  "sections": [{"heading": "short subheadline", "text": "paragraphs separated by \\n\\n"}],
   "facts": ["short highlight or interesting fact — how many depends on the length asked for"] ,
   "items": [{"name": "...", "reason": "one line"}],
   "alternatives": ["up to 3 other meanings as full questions, only when the question is truly unclear; otherwise empty"],
   "explore": "one name from this list that fits the question best, or empty string: ${EXPERIENCES.join(" | ")}"
 }
-Use "sections" only for Full Page and Extended answers (otherwise an empty array); when you use sections, "answer" is a 2-sentence opening summary and the rest goes in sections.
+SUBHEADLINES (Full Page and Extended only): inside "answer", start with a 2-sentence opening paragraph, then write each section as its own line "## Subheadline" followed by that section's paragraphs, all separated by \\n\\n. Example: "Opening sentence one. Opening sentence two.\\n\\n## How It Works\\n\\nParagraph...\\n\\n## Why It Matters\\n\\nParagraph..." Summary and Simplify answers have no subheadlines.
 Use "items" only for type "list" (otherwise an empty array). "facts" may be empty for redirects.`;
 
 const DOOR_GUIDE = {
@@ -92,8 +91,8 @@ const SECTION_GUIDE = {
 const MODE_GUIDE = {
   normal: "SUMMARY (half a page): one clear, solid answer for a general audience, 250 to 300 words in 3 paragraphs. Not skimpy: include the key names, dates, numbers and the how or why. No sections. Give 2 to 4 facts.",
   simplify: "SIMPLIFY: explain it so an 8-year-old would get it, about 150 to 200 words. Short sentences, an everyday comparison, no jargon. No sections. Give 2 to 3 facts.",
-  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" is a 2-sentence opening summary; then 3 or 4 sections, each with a short subheadline and 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. Never pad or invent details.",
-  extended: "EXTENDED (two pages): an in-depth reference answer of up to about 1,200 words. \"answer\" is a 2-sentence opening summary; then 6 to 8 sections, each with a short subheadline and 1 or 2 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give up to 6 facts as highlight bullets: interesting facts that are not just repeats of the text. Two pages is a ceiling, not a quota: if the topic does not have that much real substance, write only what is genuinely there, with fewer sections. Never pad, repeat yourself, or invent details to fill space.",
+  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" opens with a 2-sentence summary, then 3 or 4 \"## \" subheadlines, each followed by 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. Never pad or invent details.",
+  extended: "EXTENDED (two pages): an in-depth reference answer of up to about 1,200 words. \"answer\" opens with a 2-sentence summary, then 6 to 8 \"## \" subheadlines, each followed by 1 or 2 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give up to 6 facts as highlight bullets: interesting facts that are not just repeats of the text. Two pages is a ceiling, not a quota: if the topic does not have that much real substance, write only what is genuinely there, with fewer sections. Never pad, repeat yourself, or invent details to fill space.",
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
@@ -283,6 +282,22 @@ function salvage(text) {
   return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, sections, facts, items, art: str("art"), order: str("order"), explore: str("explore"), partial: true };
 }
 
+// Turn "## Subheadline" lines inside the answer into sections
+function splitHeadings(card) {
+  const lines = String(card.answer || "").split(/\n/);
+  if (!lines.some((l) => /^\s*#{2,4}\s+\S/.test(l))) return [];
+  const lead = [], out = [];
+  let cur = null;
+  for (const l of lines) {
+    const m = l.match(/^\s*#{2,4}\s+(.+?)\s*#*\s*$/);
+    if (m) { cur = { heading: m[1].replace(/\*\*/g, ""), text: "" }; out.push(cur); continue; }
+    if (cur) cur.text += l + "\n"; else lead.push(l);
+  }
+  out.forEach((x) => { x.text = x.text.replace(/\n{3,}/g, "\n\n").trim(); });
+  card.answer = lead.join("\n").trim();
+  return out.filter((x) => x.heading);
+}
+
 function parseCard(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -296,6 +311,7 @@ function parseCard(text) {
   card.question = String(card.question || "").slice(0, 300);
   card.answer = String(card.answer || "");
   card.facts = Array.isArray(card.facts) ? card.facts.map(String).filter(Boolean).slice(0, 8) : [];
+  card.sections = Array.isArray(card.sections) && card.sections.length ? card.sections : splitHeadings(card);
   card.sections = Array.isArray(card.sections)
     ? card.sections.filter((x) => x && (x.heading || x.text)).map((x) => ({ heading: String(x.heading || "").slice(0, 120), text: String(x.text || "") })).slice(0, 10)
     : [];
@@ -434,7 +450,7 @@ export default async function handler(req, res) {
       ].filter(Boolean).join("\n\n");
       text = await askClaude({
         model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "full" ? "Full Page" : "Extended") + " answer, so the \"sections\" array is REQUIRED and must not be empty. The door's points above become separate sections, each with its own subheadline." : ""}`,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "full" ? "Full Page" : "Extended") + " answer, so the \"## \" subheadline lines in \"answer\" are REQUIRED. The door's points above become separate sections, each with its own \"## \" subheadline." : ""}`,
         user,
         maxTokens: mode === "extended" ? 7000 : mode === "full" ? 4200 : 2600,
         maxSearches: door === "future" ? 4 : 2,
@@ -446,7 +462,7 @@ export default async function handler(req, res) {
       const again = await askClaude({
         model: MODEL,
         system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}\n${SECTION_GUIDE[door]}`,
-        user: `Door: ${door.toUpperCase()}\n\nQuestion: ${question}\n\nYour last reply had no "sections". Reply again with the full JSON: "answer" is only a 2-sentence opening, and the body goes in "sections" (${mode === "full" ? "3 or 4" : "6 to 8"} sections, each with a heading and text). ${mode === "full" ? "About 600 words and exactly 3 facts." : "Up to about 1,200 words and up to 6 facts."}`,
+        user: `Door: ${door.toUpperCase()}\n\nQuestion: ${question}\n\nYour last reply had no subheadlines. Reply again with the full JSON. Inside "answer": a 2-sentence opening paragraph, then ${mode === "full" ? "3 or 4" : "6 to 8"} sections, each starting with its own line "## Subheadline" and followed by its paragraphs. ${mode === "full" ? "About 600 words and exactly 3 facts." : "Up to about 1,200 words and up to 6 facts."}`,
         maxTokens: mode === "extended" ? 7000 : 4200,
         maxSearches: 1,
       });
