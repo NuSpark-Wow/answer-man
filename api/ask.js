@@ -92,7 +92,7 @@ const SECTION_GUIDE = {
 const MODE_GUIDE = {
   normal: "SUMMARY (half a page): one clear, solid answer for a general audience, 250 to 300 words in 3 paragraphs. Not skimpy: include the key names, dates, numbers and the how or why. No sections. Give 2 to 4 facts.",
   simplify: "SIMPLIFY: explain it so an 8-year-old would get it, about 150 to 200 words. Short sentences, an everyday comparison, no jargon. No sections. Give 2 to 3 facts.",
-  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" is a 2-sentence opening summary; then 3 or 4 sections, each with a short subheadline and 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. If the topic is small, a shorter answer is fine; never pad or invent details.",
+  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" is a 2-sentence opening summary; then 3 or 4 sections, each with a short subheadline and 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. Never pad or invent details.",
   extended: "EXTENDED (two pages): an in-depth reference answer of up to about 1,200 words. \"answer\" is a 2-sentence opening summary; then 6 to 8 sections, each with a short subheadline and 1 or 2 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give up to 6 facts as highlight bullets: interesting facts that are not just repeats of the text. Two pages is a ceiling, not a quota: if the topic does not have that much real substance, write only what is genuinely there, with fewer sections. Never pad, repeat yourself, or invent details to fill space.",
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
@@ -268,6 +268,10 @@ function salvage(text) {
     const after = text.slice(text.indexOf("[", fi) + 1);
     facts = done(after.split("]")[0] + (after.includes("]") ? "]" : ""));
   }
+  const sections = [];
+  const secRe = /\{\s*"heading"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+  let sm;
+  while ((sm = secRe.exec(text))) sections.push({ heading: unescapeJson(sm[1]), text: unescapeJson(sm[2]) });
   const items = [];
   const itemRe = /\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"from"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"to"\s*:\s*(null|-?\d+)\s*)?(?:,\s*"visual"\s*:\s*"((?:[^"\\]|\\.)*)"\s*)?\}/g;
   let im;
@@ -276,7 +280,7 @@ function salvage(text) {
     const plain = text.replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").trim();
     return { type: "answer", title: "Here's your answer", answer: plain, facts: [], items: [], explore: "", partial: true };
   }
-  return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, facts, items, art: str("art"), order: str("order"), explore: str("explore"), partial: true };
+  return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, sections, facts, items, art: str("art"), order: str("order"), explore: str("explore"), partial: true };
 }
 
 function parseCard(text) {
@@ -426,13 +430,25 @@ export default async function handler(req, res) {
       ].filter(Boolean).join("\n\n");
       text = await askClaude({
         model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] : ""}`,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "full" ? "Full Page" : "Extended") + " answer, so the \"sections\" array is REQUIRED and must not be empty. The door's points above become separate sections, each with its own subheadline." : ""}`,
         user,
         maxTokens: mode === "extended" ? 7000 : mode === "full" ? 4200 : 2600,
         maxSearches: door === "future" ? 4 : 2,
       });
     }
-    const card = parseCard(text);
+    let card = parseCard(text);
+    if ((mode === "full" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length) {
+      // The writer skipped the subheadlines: ask once more, firmly
+      const again = await askClaude({
+        model: MODEL,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}\n${SECTION_GUIDE[door]}`,
+        user: `Door: ${door.toUpperCase()}\n\nQuestion: ${question}\n\nYour last reply had no "sections". Reply again with the full JSON: "answer" is only a 2-sentence opening, and the body goes in "sections" (${mode === "full" ? "3 or 4" : "6 to 8"} sections, each with a heading and text). ${mode === "full" ? "About 600 words and exactly 3 facts." : "Up to about 1,200 words and up to 6 facts."}`,
+        maxTokens: mode === "extended" ? 7000 : 4200,
+        maxSearches: 1,
+      });
+      const c2 = parseCard(again);
+      if (c2.sections.length) card = c2;
+    }
 
     // Double-check the time range: drop any list item dated outside it
     const bounds = kind === "ranking" && mode !== "followup" ? parseRange(range) : null;
