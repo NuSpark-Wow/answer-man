@@ -129,6 +129,22 @@
   .card .lead{font-size:18px;font-style:italic}
   .facts .fh{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--gold-hi);padding:0 0 6px}
   .facts .fh::before{content:none}
+  .verified{display:inline-flex;align-items:center;gap:6px;background:rgba(120,200,140,.18);border:1.5px solid rgba(140,220,160,.6);color:#d9f5df;border-radius:999px;padding:5px 12px;font-size:14px;font-weight:700;margin:4px 0 10px}
+  .vbox{margin:14px 0 4px;padding:14px 16px;border-radius:10px;background:rgba(247,236,210,.07);border:1px solid rgba(247,236,210,.18)}
+  .vbox h4{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-hi);margin-bottom:8px}
+  .vbox li{font-size:15px;line-height:1.5;margin:0 0 6px 18px}
+  .vbox a{color:var(--gold-hi);word-break:break-word}
+  .second-box{margin:14px 0 4px;padding:16px;border-radius:12px;background:rgba(247,236,210,.08);border:1.5px solid rgba(212,169,55,.55)}
+  .second-box h4{font-family:'Playfair Display',serif;font-size:20px;color:var(--gold-hi);margin-bottom:6px}
+  .second-box p,.second-box li{font-size:15px;line-height:1.5;color:var(--cream)}
+  .second-box ol{margin:8px 0 10px 20px}.second-box li{margin-bottom:6px}
+  .second-box label{display:block;font-size:14px;font-weight:700;color:var(--cream);margin:6px 0 6px}
+  .second-box textarea{width:100%;min-height:150px;border-radius:10px;border:1.5px solid rgba(247,236,210,.4);background:rgba(0,0,0,.25);color:var(--cream);font:15px/1.45 inherit;padding:10px;resize:vertical}
+  .second-box .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .second-box .err{color:#ffd2c2;font-size:14px;margin-top:6px}
+  .persp-hint{font-size:13.5px !important;line-height:1.45;color:var(--cream);opacity:.85;margin:8px 2px 0}
+  .act.second{background:#2f5f3c;color:#eaf7ed;border:1.5px solid rgba(140,220,160,.6)}
+  .act.verify{background:#2f5f3c;color:#eaf7ed;border:1.5px solid rgba(140,220,160,.6)}
   .act.print{background:transparent;color:var(--cream);border:1.5px solid rgba(247,236,210,.5)}
   .facts{margin:6px 0 4px;padding:14px 16px;background:rgba(247,236,210,.1);border-radius:10px;list-style:none}
   .facts li{font-size:15px;line-height:1.5;padding:4px 0 4px 22px;position:relative}
@@ -479,6 +495,8 @@
     var msg = isFollow ? "Mr. Paul is thinking about your follow-up…" : payload.kind === "ranking" ? rankingReading(payload)
             : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
             : payload.mode === "extended" ? "Mr. Paul is writing an extended answer… this one takes a little longer"
+            : payload.mode === "verify" ? "Claude and ChatGPT are double-checking this answer… about 1 to 2 minutes"
+            : payload.mode === "combine" ? "Mr. Paul is blending both answers into one report… about a minute"
             : "Mr. Paul is looking that up…";
     lightUp(false);
     var thinkHtml = '<span class="dots"><span></span><span></span><span></span></span><span>' + msg + '</span>';
@@ -570,11 +588,12 @@
     if (card.facts && card.facts.length) t += "\n" + card.facts.join("\n");
     return t.slice(0, 14000);
   }
-  var MODE_LABEL = { normal:"", simplify:" · Simplified", extended:" · Extended" };
+  var MODE_LABEL = { normal:"", simplify:" · Simplified", extended:" · Extended", verify:" · Verified Report", combine:" · Combined Report" };
   function paras(t, cls){ var h=""; String(t || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) h += '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(p.trim()) + '</p>'; }); return h; }
   function bodyHtml(card){
     var secs = card.sections && card.sections.length;
-    var h = paras(card.answer, secs ? "lead" : "");
+    var h = card.checkedBy ? '<div class="verified">✓ Double-checked by ' + esc(card.checkedBy) + '</div>' : '';
+    h += paras(card.answer, secs ? "lead" : "");
     if (secs) card.sections.forEach(function(x){ if (x.heading) h += '<h3 class="sub">' + esc(x.heading) + '</h3>'; h += paras(x.text); });
     if (card.items && card.items.length){
       h += '<ul class="list">'; card.items.forEach(function(it){ h += '<li><b>' + esc(it.name) + (it.year ? ' <small class="yr">' + esc(it.year) + '</small>' : '') + '</b><span>' + esc(it.reason) + '</span></li>'; }); h += '</ul>';
@@ -582,6 +601,15 @@
     if (card.facts && card.facts.length){
       h += '<ul class="facts">' + (secs ? '<li class="fh">Highlights</li>' : '');
       card.facts.forEach(function(f){ h += '<li>' + esc(f) + '</li>'; }); h += '</ul>';
+    }
+    if (card.checkedBy){
+      h += '<div class="vbox"><h4>What we updated</h4>';
+      if (card.corrections && card.corrections.length){ h += '<ul>'; card.corrections.forEach(function(c){ h += '<li>' + esc(c) + '</li>'; }); h += '</ul>'; }
+      else h += '<p style="font-size:15px;margin:0">Both checks agreed. No changes were needed.</p>';
+      h += '</div>';
+      if (card.sources && card.sources.length){
+        h += '<div class="vbox"><h4>Sources</h4><ul>'; card.sources.forEach(function(x){ h += '<li><a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a></li>'; }); h += '</ul></div>';
+      }
     }
     return h;
   }
@@ -592,15 +620,54 @@
     if (mode !== "extended") h += '<button class="act" ' + attr + '="extended">Extended</button>';
     return h;
   }
+  // ---------- Second opinion: compare with another AI tool, then combine both ----------
+  function openSecond(card, payload){
+    var cardEl = out.querySelector(".card"); if (!cardEl) return;
+    var box = cardEl.querySelector(".second-box");
+    if (box){ box.scrollIntoView({ behavior:"smooth", block:"nearest" }); return; }
+    box = document.createElement("div"); box.className = "second-box";
+    box.innerHTML = '<h4>Gain Another Perspective</h4>' +
+      '<p>Every AI has its own strengths. Bring in another one, and Mr. Paul will blend the best of both into one complete report.</p>' +
+      '<ol><li><b>Copy our answer:</b> tap the <b>Copy for AI</b> button below.</li>' +
+      '<li><b>Paste it into another AI:</b> open ChatGPT, Gemini, or any AI tool you like, paste it in the message box, and send it.</li>' +
+      '<li><b>Copy its response:</b> when it finishes, use that AI\'s copy button (or select all of its response and copy).</li>' +
+      '<li><b>Paste it here:</b> tap <b>Paste</b> below, or tap inside the box and paste (on a phone, press and hold, then Paste; on a computer, Ctrl+V or Cmd+V).</li>' +
+      '<li>Tap <b>Blend into one report</b>.</li></ol>' +
+      '<div class="row"><button class="act print copy2" type="button">Copy for AI</button></div>' +
+      '<label for="secondText">Paste the other AI\'s response here</label><textarea id="secondText" maxlength="20000"></textarea>' +
+      '<div class="row"><button class="act print paste2" type="button">Paste</button><button class="act combine" type="button">Blend into one report</button><button class="act print cancel2" type="button">Close</button></div><div class="err" id="secondErr"></div>';
+    var hintEl = cardEl.querySelector(".persp-hint"); if (hintEl) hintEl.style.display = "none";
+    cardEl.querySelector(".actions").after(box);
+    box.querySelector(".copy2").addEventListener("click", function(){ copyCard(card, box.querySelector(".copy2")); });
+    box.querySelector(".cancel2").addEventListener("click", function(){ box.remove(); if (hintEl) hintEl.style.display = ""; });
+    box.querySelector(".paste2").addEventListener("click", function(){
+      var ta = box.querySelector("#secondText"), er = box.querySelector("#secondErr");
+      if (navigator.clipboard && navigator.clipboard.readText){
+        navigator.clipboard.readText().then(function(t){ if (t && t.trim()){ ta.value = t; er.textContent = ""; } else { er.textContent = "Nothing to paste yet. Copy the other AI's response first."; } },
+          function(){ ta.focus(); er.textContent = "Tap inside the box and paste (press and hold, then Paste)."; });
+      } else { ta.focus(); er.textContent = "Tap inside the box and paste (press and hold, then Paste)."; }
+    });
+    box.querySelector(".combine").addEventListener("click", function(){
+      var t = box.querySelector("#secondText").value.trim();
+      if (t.length < 40){ box.querySelector("#secondErr").textContent = "Please paste the other AI's response first."; box.querySelector("#secondText").focus({ preventScroll:true }); return; }
+      box.remove();
+      var base = state.lastQ;
+      ask({ kind:"question", question:base.question, door:base.door, mode:"combine", previous:state.mainAnswer, review:t, keepCard:true });
+    });
+    box.scrollIntoView({ behavior:"smooth", block:"nearest" });
+  }
   // ---------- Copy for another AI tool ----------
   function plainCard(card){
     var t = "Review, double-check, and add relevant images.\n\n";
+    if (card.checkedBy) t += "[Double-checked by " + card.checkedBy + "]\n\n";
     t += (card.title || "") + "\n";
     if (card.question) t += "Question: " + card.question + "\n";
     t += "\n" + String(card.answer || "").trim() + "\n";
     (card.sections || []).forEach(function(x){ t += "\n" + (x.heading || "").toUpperCase() + "\n" + String(x.text || "").trim() + "\n"; });
     (card.items || []).forEach(function(it){ t += "\n- " + it.name + (it.year ? " (" + it.year + ")" : "") + ": " + it.reason; });
     if (card.facts && card.facts.length) t += "\n\nHIGHLIGHTS\n" + card.facts.map(function(f){ return "- " + f; }).join("\n");
+    if (card.corrections && card.corrections.length) t += "\n\nWHAT WE UPDATED\n" + card.corrections.map(function(c){ return "- " + c; }).join("\n");
+    if (card.sources && card.sources.length) t += "\n\nSOURCES\n" + card.sources.map(function(x){ return "- " + x.title + ": " + x.url; }).join("\n");
     t += "\n\nSource: The Answer Man (Ask Mr. Paul) at nusparklearnwow.com. AI can make mistakes, so double-check anything important.";
     return t;
   }
@@ -629,6 +696,13 @@
     if (secs) card.sections.forEach(function(x){ if (x.heading) b += '<h2>' + esc(x.heading) + '</h2>'; b += paras(x.text); });
     if (card.items && card.items.length){ b += '<ul class="list">'; card.items.forEach(function(it){ b += '<li><b>' + esc(it.name) + (it.year ? ' (' + esc(it.year) + ')' : '') + '</b> — ' + esc(it.reason) + '</li>'; }); b += '</ul>'; }
     if (card.facts && card.facts.length){ b += '<div class="facts"><h4>' + (secs ? 'HIGHLIGHTS' : 'KEY FACTS') + '</h4><ul>'; card.facts.forEach(function(x){ b += '<li>' + esc(x) + '</li>'; }); b += '</ul></div>'; }
+    if (card.checkedBy){
+      b += '<div class="facts"><h4>DOUBLE-CHECKED BY ' + esc(card.checkedBy.toUpperCase()) + '</h4>';
+      if (card.corrections && card.corrections.length){ b += '<p style="margin:0 0 4px"><b>What we updated:</b></p><ul>'; card.corrections.forEach(function(c){ b += '<li>' + esc(c) + '</li>'; }); b += '</ul>'; }
+      else b += '<p>No corrections were needed.</p>';
+      if (card.sources && card.sources.length){ b += '<p style="margin:6px 0 4px"><b>Sources:</b></p><ul>'; card.sources.forEach(function(x){ b += '<li>' + esc(x.title) + ' — ' + esc(x.url) + '</li>'; }); b += '</ul>'; }
+      b += '</div>';
+    }
     b += '<div class="foot">From The Answer Man at nusparklearnwow.com · Mr. Paul does his homework, but AI can make mistakes, so double-check anything important. Not medical, legal or financial advice.</div>';
     var doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(card.title || "The Answer Man") + '</title><style>' + css + '</style></head><body>' + b +
       '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>';
@@ -701,6 +775,9 @@
     var printBtn = out.querySelector(".card > .actions .act.print:not(.copy)");
     var copyBtn = out.querySelector(".card > .actions .act.copy");
     if (copyBtn) copyBtn.addEventListener("click", function(){ copyCard(card, copyBtn); });
+    var secondBtn = out.querySelector(".card > .actions .act.second");
+    if (secondBtn){ var hint = document.createElement("p"); hint.className = "persp-hint"; hint.innerHTML = '<b>Gain Another Perspective:</b> copy our answer into your favorite AI tool (ChatGPT, Gemini, or another), then paste its response back here. Mr. Paul blends the best of both into one report.'; out.querySelector(".card > .actions").after(hint); }
+    if (secondBtn) secondBtn.addEventListener("click", function(){ openSecond(card, payload); });
     if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
   }
   function newQuestion(){
@@ -727,6 +804,7 @@
     if (payload.kind === "question" && card.type !== "redirect"){
       html += sizeButtons(payload.mode || "normal", "data-mode");
       html += '<button class="act print copy" type="button">Copy for AI</button>';
+      if (payload.mode !== "simplify") { html += '<button class="act second" type="button">Gain Another Perspective</button>'; state.showHint = true; } else state.showHint = false;
       html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     var canInfo = payload.kind === "ranking" && payload.size === 25 && card.type === "list" && card.items && card.items.length >= 9;
@@ -758,6 +836,9 @@
     var printBtn = out.querySelector(".card > .actions .act.print:not(.copy)");
     var copyBtn = out.querySelector(".card > .actions .act.copy");
     if (copyBtn) copyBtn.addEventListener("click", function(){ copyCard(card, copyBtn); });
+    var secondBtn = out.querySelector(".card > .actions .act.second");
+    if (secondBtn){ var hint = document.createElement("p"); hint.className = "persp-hint"; hint.innerHTML = '<b>Gain Another Perspective:</b> copy our answer into your favorite AI tool (ChatGPT, Gemini, or another), then paste its response back here. Mr. Paul blends the best of both into one report.'; out.querySelector(".card > .actions").after(hint); }
+    if (secondBtn) secondBtn.addEventListener("click", function(){ openSecond(card, payload); });
     if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
     var infoBtn = out.querySelector(".act.info");
     if (infoBtn) infoBtn.addEventListener("click", function(){ showInfographic(card, payload); });
@@ -770,7 +851,7 @@
     out.querySelectorAll(".act[data-mode]").forEach(function(a){
       a.addEventListener("click", function(){
         var base = state.lastQ;
-        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:a.dataset.mode === "simplify" ? state.mainAnswer : "", keepCard:true });
+        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:(a.dataset.mode === "simplify" || a.dataset.mode === "verify") ? state.mainAnswer : "", keepCard:true });
       });
     });
   }
