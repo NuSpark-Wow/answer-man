@@ -25,8 +25,8 @@ const R_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
 const DOORS = ["who", "what", "where", "when", "why", "how", "evolution", "future"];
-const MODES = ["normal", "simplify", "full", "extended", "followup"];
-const MODE_ALIAS = { deeper: "full", double: "extended" }; // older buttons
+const MODES = ["normal", "simplify", "extended", "followup"];
+const MODE_ALIAS = { full: "normal", deeper: "extended", double: "extended" }; // older buttons
 const EXPERIENCES = [
   "Mr. Paul's Classroom", "The Lecture Hall", "Remember When", "How It Works",
   "What's the Difference?", "The AI Encyclopedias", "Debate Me", "The Guess Room",
@@ -46,7 +46,7 @@ RULES
 7. Health, legal, and money questions: give general educational information only, never personal advice, and say to check with a doctor, lawyer, or financial professional.
 8. Keep everything family-friendly. If a question is inappropriate or unsafe, return type "redirect" with a gentle, kind reply and a better question to ask.
 9. Accuracy first. If you are not sure, say so plainly. Use web search only when the answer depends on current or recent information.
-10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **), except the "## " subheadline lines that Full Page and Extended answers require.
+10. Write like a warm, smart teacher talking to a curious person. Short paragraphs. No markdown symbols (no #, *, or **), except the "## " subheadline lines that Full Answer and Extended answers require.
 11. Spelling: people type fast. Silently read past typos, misspellings, and grammar slips, and answer what they meant. Never point out or comment on their mistakes.
 12. Unclear questions: if a question could reasonably mean very different things (for example "Mercury" could be the planet, the element, the Roman god, or Freddie Mercury), answer the most likely meaning and list up to 3 other meanings in "alternatives", each written as a full question. For clear questions, leave "alternatives" empty. Don't use it for small variations.
 
@@ -62,7 +62,7 @@ Reply with ONLY one JSON object, nothing before or after it:
   "alternatives": ["up to 3 other meanings as full questions, only when the question is truly unclear; otherwise empty"],
   "explore": "one name from this list that fits the question best, or empty string: ${EXPERIENCES.join(" | ")}"
 }
-SUBHEADLINES (Full Page and Extended only): inside "answer", start with a 2-sentence opening paragraph, then write each section as its own line "## Subheadline" followed by that section's paragraphs, all separated by \\n\\n. Example: "Opening sentence one. Opening sentence two.\\n\\n## How It Works\\n\\nParagraph...\\n\\n## Why It Matters\\n\\nParagraph..." Summary and Simplify answers have no subheadlines.
+SUBHEADLINES (Full Answer and Extended): inside "answer", start with a 2-sentence opening paragraph, then write each section as its own line "## Subheadline" followed by that section's paragraphs, all separated by \\n\\n. Example: "Opening sentence one. Opening sentence two.\\n\\n## How It Works\\n\\nParagraph...\\n\\n## Why It Matters\\n\\nParagraph..." Summary and Simplify answers have no subheadlines.
 Use "items" only for type "list" (otherwise an empty array). "facts" may be empty for redirects.`;
 
 const DOOR_GUIDE = {
@@ -89,10 +89,9 @@ const SECTION_GUIDE = {
 };
 
 const MODE_GUIDE = {
-  normal: "SUMMARY (half a page): one clear, solid answer for a general audience, 250 to 300 words in 3 paragraphs. Not skimpy: include the key names, dates, numbers and the how or why. No sections. Give 2 to 4 facts.",
-  simplify: "SIMPLIFY: explain it so an 8-year-old would get it, about 150 to 200 words. Short sentences, an everyday comparison, no jargon. No sections. Give 2 to 3 facts.",
-  full: "FULL PAGE: a complete reference answer of about 600 words. \"answer\" opens with a 2-sentence summary, then 3 or 4 \"## \" subheadlines, each followed by 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. Never pad or invent details.",
-  extended: "EXTENDED (two pages): an in-depth reference answer of up to about 1,200 words. \"answer\" opens with a 2-sentence summary, then 6 to 8 \"## \" subheadlines, each followed by 1 or 2 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give up to 6 facts as highlight bullets: interesting facts that are not just repeats of the text. Two pages is a ceiling, not a quota: if the topic does not have that much real substance, write only what is genuinely there, with fewer sections. Never pad, repeat yourself, or invent details to fill space.",
+  normal: "FULL ANSWER: a complete, go-to reference answer of 600 to 800 words. \"answer\" opens with a 2-sentence summary, then 3 to 5 \"## \" subheadlines, each followed by 1 or 2 paragraphs. Use real specifics: names, dates, numbers, how it worked, causes and effects. Give 3 facts as highlight bullets: interesting facts that are not just repeats of the text. Never pad or invent details.",
+  simplify: "SIMPLIFY: explain it so an 8-year-old would get it, about 150 to 250 words. Short sentences, an everyday comparison, no jargon. No subheadlines. Give 2 to 3 facts.",
+  extended: "EXTENDED: an in-depth reference answer of 1,200 to 1,600 words. \"answer\" opens with a 2-sentence summary, then 6 to 9 \"## \" subheadlines, each followed by 1 to 3 paragraphs. Cover the topic fully, with real specifics: names, dates, numbers, how it worked, causes and effects, lesser-known details. Give 6 facts as highlight bullets: interesting facts that are not just repeats of the text. Never repeat yourself or invent details to fill space.",
   followup: "FOLLOW-UP: the person is asking a clarification or follow-up about the answer already shown. Answer it directly and briefly. If they say the answer was wrong, unclear, or missed the point, correct or clarify it plainly and without fuss. All the rules still apply.",
 };
 
@@ -282,6 +281,27 @@ function salvage(text) {
   return { type: type || (items.length ? "list" : "answer"), question: str("question"), title, answer, sections, facts, items, art: str("art"), order: str("order"), explore: str("explore"), partial: true };
 }
 
+// Safety net: if an answer came back without subheadlines, write one for each paragraph after the opening
+async function addHeadings(card) {
+  const paras = String(card.answer || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (paras.length < 3) return;
+  try {
+    const reply = await askClaude({
+      model: MODEL,
+      system: "You write short, clear subheadlines (2 to 6 words, title case, no punctuation at the end) for paragraphs of a reference article. Reply with ONLY a JSON object.",
+      user: `Article title: ${card.title}\n\n` + paras.slice(1).map((p, i) => `Paragraph ${i + 1}:\n${p}`).join("\n\n") +
+        `\n\nReply with {"headings": [...]} containing exactly ${paras.length - 1} subheadlines, one per paragraph, in order.`,
+      maxTokens: 600,
+      maxSearches: 1,
+    });
+    const m = reply.match(/\{[\s\S]*\}/);
+    const heads = m ? JSON.parse(m[0]).headings : null;
+    if (!Array.isArray(heads) || !heads.length) return;
+    card.sections = paras.slice(1).map((p, i) => ({ heading: String(heads[i] || "").replace(/^#+\s*/, "").slice(0, 120), text: p }));
+    card.answer = paras[0];
+  } catch { /* keep the answer as it is */ }
+}
+
 // Turn "## Subheadline" lines inside the answer into sections
 function splitHeadings(card) {
   const lines = String(card.answer || "").split(/\n/);
@@ -374,7 +394,7 @@ export default async function handler(req, res) {
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
     ? `amp:cache:v6:rank:${size}:${normalize(range)}:${normalize(q)}`
-    : `amp:cache:v5:q:${door}:${mode}:${normalize(q)}`;
+    : `amp:cache:v6:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
   const cacheKey = (mode === "followup" || body.noCache) ? null : keyFor(question);
@@ -383,7 +403,7 @@ export default async function handler(req, res) {
     try {
       const c = JSON.parse(cached);
       // never serve a saved Full Page / Extended answer that is missing its subheadlines
-      if (!((mode === "full" || mode === "extended") && !(c.sections && c.sections.length))) return res.status(200).json({ card: c, cached: true });
+      if (!((mode === "normal" || mode === "extended") && !(c.sections && c.sections.length))) return res.status(200).json({ card: c, cached: true });
     } catch { /* fall through */ }
   }
 
@@ -450,24 +470,16 @@ export default async function handler(req, res) {
       ].filter(Boolean).join("\n\n");
       text = await askClaude({
         model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "full" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "full" ? "Full Page" : "Extended") + " answer, so the \"## \" subheadline lines in \"answer\" are REQUIRED. The door's points above become separate sections, each with its own \"## \" subheadline." : ""}`,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "normal" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "normal" ? "Full Answer" : "Extended") + " answer, so the \"## \" subheadline lines in \"answer\" are REQUIRED. The door's points above become separate sections, each with its own \"## \" subheadline." : ""}`,
         user,
-        maxTokens: mode === "extended" ? 7000 : mode === "full" ? 4200 : 2600,
+        maxTokens: mode === "extended" ? 8000 : mode === "normal" ? 4800 : 2600,
         maxSearches: door === "future" ? 4 : 2,
       });
     }
     let card = parseCard(text);
-    if ((mode === "full" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length) {
-      // The writer skipped the subheadlines: ask once more, firmly
-      const again = await askClaude({
-        model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}\n${SECTION_GUIDE[door]}`,
-        user: `Door: ${door.toUpperCase()}\n\nQuestion: ${question}\n\nYour last reply had no subheadlines. Reply again with the full JSON. Inside "answer": a 2-sentence opening paragraph, then ${mode === "full" ? "3 or 4" : "6 to 8"} sections, each starting with its own line "## Subheadline" and followed by its paragraphs. ${mode === "full" ? "About 600 words and exactly 3 facts." : "Up to about 1,200 words and up to 6 facts."}`,
-        maxTokens: mode === "extended" ? 7000 : 4200,
-        maxSearches: 1,
-      });
-      const c2 = parseCard(again);
-      if (c2.sections.length) card = c2;
+    if ((mode === "normal" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length) {
+      // The writer skipped the subheadlines: add them with a quick, cheap second step
+      await addHeadings(card);
     }
 
     // Double-check the time range: drop any list item dated outside it
@@ -503,7 +515,7 @@ export default async function handler(req, res) {
     if (mode === "extended") await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]); // two-page answers count as 2
     const partial = !!card.partial;
     delete card.partial;
-    const missingSections = (mode === "full" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length;
+    const missingSections = (mode === "normal" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length;
     if (cacheKey && card.type !== "redirect" && !partial && !missingSections) {
       const ttl = kind === "ranking" ? 604800 : door === "future" ? 259200 : 1209600; // Future answers refresh every 3 days
       const saves = [redis(["SET", cacheKey, JSON.stringify(card), "EX", ttl])];
