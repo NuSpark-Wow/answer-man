@@ -358,13 +358,17 @@ export default async function handler(req, res) {
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
     ? `amp:cache:v6:rank:${size}:${normalize(range)}:${normalize(q)}`
-    : `amp:cache:v4:q:${door}:${mode}:${normalize(q)}`;
+    : `amp:cache:v5:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
   const cacheKey = (mode === "followup" || body.noCache) ? null : keyFor(question);
   const cached = cacheKey ? await redis(["GET", cacheKey]) : null;
   if (cached) {
-    try { return res.status(200).json({ card: JSON.parse(cached), cached: true }); } catch { /* fall through */ }
+    try {
+      const c = JSON.parse(cached);
+      // never serve a saved Full Page / Extended answer that is missing its subheadlines
+      if (!((mode === "full" || mode === "extended") && !(c.sections && c.sections.length))) return res.status(200).json({ card: c, cached: true });
+    } catch { /* fall through */ }
   }
 
   // 2) Human check
@@ -483,7 +487,8 @@ export default async function handler(req, res) {
     if (mode === "extended") await Promise.all([bump(ipKey), visKey ? bump(visKey) : null, bump(globalKey)]); // two-page answers count as 2
     const partial = !!card.partial;
     delete card.partial;
-    if (cacheKey && card.type !== "redirect" && !partial) {
+    const missingSections = (mode === "full" || mode === "extended") && kind === "question" && card.type === "answer" && !card.sections.length;
+    if (cacheKey && card.type !== "redirect" && !partial && !missingSections) {
       const ttl = kind === "ranking" ? 604800 : door === "future" ? 259200 : 1209600; // Future answers refresh every 3 days
       const saves = [redis(["SET", cacheKey, JSON.stringify(card), "EX", ttl])];
       // Also save under the corrected spelling, so the clean version of the question is instant next time
