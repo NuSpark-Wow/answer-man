@@ -124,6 +124,11 @@
   .badge{display:inline-block;font:700 11px 'Inter';letter-spacing:.14em;text-transform:uppercase;background:var(--cream);color:var(--ink);padding:4px 10px;border-radius:999px;margin-bottom:10px}
   .card h2{font-family:'Playfair Display',serif;font-size:26px;color:var(--cream);margin-bottom:12px;line-height:1.2}
   .card p{font-size:17px;line-height:1.65;color:var(--cream);margin-bottom:12px}
+  .card h3.sub{font-family:'Playfair Display',serif;font-size:21px;color:var(--gold-hi);margin:20px 0 8px;line-height:1.25}
+  .card .lead{font-size:18px;font-style:italic}
+  .facts .fh{font-weight:800;letter-spacing:.12em;font-size:12px;text-transform:uppercase;color:var(--gold-hi);padding:0 0 6px}
+  .facts .fh::before{content:none}
+  .act.print{background:transparent;color:var(--cream);border:1.5px solid rgba(247,236,210,.5)}
   .facts{margin:6px 0 4px;padding:14px 16px;background:rgba(247,236,210,.1);border-radius:10px;list-style:none}
   .facts li{font-size:15px;line-height:1.5;padding:4px 0 4px 22px;position:relative}
   .facts li::before{content:"✦";position:absolute;left:0;color:var(--gold-hi)}
@@ -472,8 +477,8 @@
     var fIdx = (payload.followIndex === undefined) ? null : payload.followIndex;
     var msg = isFollow ? "Mr. Paul is thinking about your follow-up…" : payload.kind === "ranking" ? rankingReading(payload)
             : payload.mode === "simplify" ? "Mr. Paul is making it simpler…"
-            : payload.mode === "deeper" ? "Mr. Paul is digging deeper…"
-            : payload.mode === "double" ? "Mr. Paul is writing a longer answer…"
+            : payload.mode === "full" ? "Mr. Paul is writing a full page…"
+            : payload.mode === "extended" ? "Mr. Paul is writing two full pages… this one takes a little longer"
             : "Mr. Paul is looking that up…";
     lightUp(false);
     var thinkHtml = '<span class="dots"><span></span><span></span><span></span></span><span>' + msg + '</span>';
@@ -554,35 +559,81 @@
   }
   function cardText(card){
     var t = card.answer || "";
+    if (card.sections && card.sections.length) t += "\n" + card.sections.map(function(x){ return x.heading + "\n" + x.text; }).join("\n");
     if (card.items && card.items.length) t += "\n" + card.items.map(function(i){ return i.name + ": " + i.reason; }).join("\n");
     if (card.facts && card.facts.length) t += "\n" + card.facts.join("\n");
-    return t.slice(0, 2500);
+    return t.slice(0, 14000);
   }
+  var MODE_LABEL = { normal:"", simplify:" · Simplified", full:" · Full Page", extended:" · Extended" };
+  function paras(t, cls){ var h=""; String(t || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) h += '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(p.trim()) + '</p>'; }); return h; }
+  function bodyHtml(card){
+    var secs = card.sections && card.sections.length;
+    var h = paras(card.answer, secs ? "lead" : "");
+    if (secs) card.sections.forEach(function(x){ if (x.heading) h += '<h3 class="sub">' + esc(x.heading) + '</h3>'; h += paras(x.text); });
+    if (card.items && card.items.length){
+      h += '<ul class="list">'; card.items.forEach(function(it){ h += '<li><b>' + esc(it.name) + (it.year ? ' <small class="yr">' + esc(it.year) + '</small>' : '') + '</b><span>' + esc(it.reason) + '</span></li>'; }); h += '</ul>';
+    }
+    if (card.facts && card.facts.length){
+      h += '<ul class="facts">' + (secs ? '<li class="fh">Highlights</li>' : '');
+      card.facts.forEach(function(f){ h += '<li>' + esc(f) + '</li>'; }); h += '</ul>';
+    }
+    return h;
+  }
+  function sizeButtons(mode, attr){
+    var h = "";
+    if (mode !== "simplify") h += '<button class="act" ' + attr + '="simplify">Simplify</button>';
+    if (mode !== "normal") h += '<button class="act" ' + attr + '="normal">Summary</button>';
+    if (mode !== "full") h += '<button class="act" ' + attr + '="full">Full Page</button>';
+    if (mode !== "extended") h += '<button class="act" ' + attr + '="extended">Extended (2 pages)</button>';
+    return h;
+  }
+  // ---------- Print / Save as PDF ----------
+  function printCard(card, door, mode){
+    var date = new Date().toLocaleDateString(undefined, { year:"numeric", month:"long", day:"numeric" });
+    var label = (door ? door.toUpperCase() : "") + (MODE_LABEL[mode] || "");
+    var css = 'body{font-family:Georgia,"Times New Roman",serif;color:#1d1a14;max-width:7in;margin:.6in auto;padding:0 .3in;line-height:1.55;font-size:12pt}' +
+      '.top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #b08a2e;padding-bottom:6px;margin-bottom:14px;font-family:Arial,sans-serif;font-size:9.5pt;color:#6b5a2e}' +
+      '.top b{font-size:11pt;color:#1d1a14}.asked{font-family:Arial,sans-serif;font-size:10pt;color:#555;margin:0 0 4px}' +
+      'h1{font-size:22pt;margin:0 0 10px;line-height:1.2}h2{font-size:14pt;margin:18px 0 4px;color:#6b4f12;page-break-after:avoid}p{margin:0 0 9px}.lead{font-style:italic}' +
+      '.facts{border:1.5px solid #d8c48e;background:#faf5e6;border-radius:8px;padding:10px 14px 6px;margin:16px 0;page-break-inside:avoid}.facts h4{margin:0 0 6px;font-family:Arial,sans-serif;font-size:9.5pt;letter-spacing:.12em;color:#8a6a1c}' +
+      '.facts li{margin:0 0 5px}ul.list li{margin:0 0 5px}.foot{margin-top:22px;border-top:1px solid #ccc;padding-top:8px;font-family:Arial,sans-serif;font-size:8.5pt;color:#666}' +
+      '@media print{body{margin:0 auto}}';
+    var b = '<div class="top"><span><b>The Answer Man</b> · Ask Mr. Paul</span><span>' + esc(label) + ' · ' + esc(date) + '</span></div>';
+    if (card.question) b += '<div class="asked">You asked: ' + esc(card.question) + '</div>';
+    b += '<h1>' + esc(card.title || "") + '</h1>';
+    var secs = card.sections && card.sections.length;
+    b += paras(card.answer, secs ? "lead" : "");
+    if (secs) card.sections.forEach(function(x){ if (x.heading) b += '<h2>' + esc(x.heading) + '</h2>'; b += paras(x.text); });
+    if (card.items && card.items.length){ b += '<ul class="list">'; card.items.forEach(function(it){ b += '<li><b>' + esc(it.name) + (it.year ? ' (' + esc(it.year) + ')' : '') + '</b> — ' + esc(it.reason) + '</li>'; }); b += '</ul>'; }
+    if (card.facts && card.facts.length){ b += '<div class="facts"><h4>' + (secs ? 'HIGHLIGHTS' : 'KEY FACTS') + '</h4><ul>'; card.facts.forEach(function(x){ b += '<li>' + esc(x) + '</li>'; }); b += '</ul></div>'; }
+    b += '<div class="foot">From The Answer Man at nusparklearnwow.com · Mr. Paul does his homework, but AI can make mistakes, so double-check anything important. Not medical, legal or financial advice.</div>';
+    var doc = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(card.title || "The Answer Man") + '</title><style>' + css + '</style></head><body>' + b +
+      '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>';
+    var url = URL.createObjectURL(new Blob([doc], { type:"text/html" }));
+    var w = window.open(url, "_blank");
+    if (!w){ var a = document.createElement("a"); a.href = url; a.download = (card.title || "answer").replace(/[^a-z0-9]+/gi, "-").toLowerCase() + ".html"; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+  }
+
   var follows = [];
   function followInner(card, idx, mode){
-    var label = "Follow-up" + (mode === "simplify" ? " · Simplified" : mode === "deeper" ? " · Deeper" : mode === "double" ? " · Double Length" : "");
+    var label = "Follow-up" + (MODE_LABEL[mode] || "");
     var html = '<span class="badge">' + label + '</span>';
     html += '<div class="asked">You asked: <b>' + esc(follows[idx].question) + '</b></div>';
     if (card.title) html += '<h2>' + esc(card.title) + '</h2>';
-    String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
-    if (card.items && card.items.length){
-      html += '<ul class="list">'; card.items.forEach(function(it){ html += '<li><b>' + esc(it.name) + (it.year ? ' <small class="yr">' + esc(it.year) + '</small>' : '') + '</b><span>' + esc(it.reason) + '</span></li>'; }); html += '</ul>';
-    }
-    if (card.facts && card.facts.length){
-      html += '<ul class="facts">'; card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; }); html += '</ul>';
-    }
+    html += bodyHtml(card);
     if (state.lastQ && state.lastQ.door === "future" && card.type !== "redirect") html += FUTURE_NOTE;
     html += '<div class="actions">';
     if (card.type !== "redirect"){
-      if (mode !== "simplify") html += '<button class="act" data-fmode="simplify">Simplify</button>';
-      if (mode !== "deeper") html += '<button class="act" data-fmode="deeper">Go Deeper</button>';
-      if (mode !== "double") html += '<button class="act" data-fmode="double">Double Length</button>';
+      html += sizeButtons(mode, "data-fmode");
+      html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     html += '<button class="act new">New Question</button></div>';
     return html;
   }
   function wireFollow(el, idx){
     el.querySelector(".act.new").addEventListener("click", newQuestion);
+    var pb = el.querySelector(".act.print"); if (pb) pb.addEventListener("click", function(){ var f = follows[idx]; printCard(f.card || {}, (state.lastQ || {}).door, f.mode || "normal"); });
     el.querySelectorAll(".act[data-fmode]").forEach(function(b){
       b.addEventListener("click", function(){
         var f = follows[idx], base = state.lastQ || {};
@@ -592,7 +643,7 @@
   }
   function appendFollow(card, payload){
     var idx = follows.length;
-    follows.push({ question: card.question || payload.followup, text: cardText(card) });
+    follows.push({ question: card.question || payload.followup, text: cardText(card), card: card, mode: "normal" });
     var thread = document.getElementById("thread");
     var el = document.createElement("div");
     el.className = "card"; el.id = "fc-" + idx;
@@ -605,7 +656,7 @@
   }
   function updateFollow(idx, card, mode){
     var el = document.getElementById("fc-" + idx); if (!el) return;
-    follows[idx].text = cardText(card);
+    follows[idx].text = cardText(card); follows[idx].card = card; follows[idx].mode = mode;
     el.innerHTML = followInner(card, idx, mode);
     wireFollow(el, idx);
     state.lastAnswer = follows[idx].text;
@@ -622,6 +673,8 @@
   function notice(text){
     out.innerHTML = '<div class="notice">' + esc(text) + '</div><div class="actions"><button class="act new">' + (state.tab === "ranking" ? "New List" : "New Question") + '</button></div>';
     out.querySelector(".act.new").addEventListener("click", newQuestion);
+    var printBtn = out.querySelector(".card > .actions .act.print");
+    if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
   }
   function newQuestion(){
     if (state.busy) return;
@@ -634,31 +687,19 @@
 
   function render(card, payload, cached){
     var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size + (payload.range && payload.range !== "All time" ? " · " + payload.range : "")
-              : payload.door.toUpperCase() + (payload.mode === "simplify" ? " · Simplified" : payload.mode === "deeper" ? " · Deeper" : "");
+              : payload.door.toUpperCase() + (MODE_LABEL[payload.mode] || "");
     var html = '<div class="card"><span class="badge">' + esc(badge) + '</span>' + (cached ? '<span class="cached">instant answer</span>' : '');
     if (card.question && payload.kind === "question") html += '<div class="asked">You asked: <b>' + esc(card.question) + '</b></div>';
     html += '<h2>' + esc(card.title) + '</h2>';
-    String(card.answer || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) html += '<p>' + esc(p.trim()) + '</p>'; });
-    if (card.items && card.items.length){
-      html += '<ul class="list">';
-      card.items.forEach(function(it){ html += '<li><b>' + esc(it.name) + (it.year ? ' <small class="yr">' + esc(it.year) + '</small>' : '') + '</b><span>' + esc(it.reason) + '</span></li>'; });
-      html += '</ul>';
-    }
-    if (card.facts && card.facts.length){
-      html += '<ul class="facts">';
-      card.facts.forEach(function(f){ html += '<li>' + esc(f) + '</li>'; });
-      html += '</ul>';
-    }
+    html += bodyHtml(card);
     if (payload.kind === "question" && payload.door === "future" && card.type !== "redirect") html += FUTURE_NOTE;
     if (payload.kind === "question" && card.alternatives && card.alternatives.length){
       html += '<div class="alts"><span>Did you mean:</span>' + card.alternatives.map(function(a){ return '<button class="alt" type="button">' + esc(a) + '</button>'; }).join("") + '</div>';
     }
     html += '<div class="actions">';
     if (payload.kind === "question" && card.type !== "redirect"){
-      if (payload.mode !== "simplify") html += '<button class="act" data-mode="simplify">Simplify</button>';
-      if (payload.mode !== "deeper") html += '<button class="act" data-mode="deeper">Go Deeper</button>';
-      if (payload.mode !== "double") html += '<button class="act" data-mode="double">Double Length</button>';
-      if (payload.mode !== "normal") html += '<button class="act" data-mode="normal">Original Answer</button>';
+      html += sizeButtons(payload.mode || "normal", "data-mode");
+      html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     var canInfo = payload.kind === "ranking" && payload.size === 25 && card.type === "list" && card.items && card.items.length >= 9;
     if (canInfo) html += '<button class="act info" type="button">Create Infographic Prompt</button>';
@@ -686,6 +727,8 @@
       ask({ kind:base.kind, question:base.question, door:base.door, size:base.size, range:base.range, mode:"followup", followup:f, previous:state.lastAnswer });
     });
     out.querySelector(".act.new").addEventListener("click", newQuestion);
+    var printBtn = out.querySelector(".card > .actions .act.print");
+    if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
     var infoBtn = out.querySelector(".act.info");
     if (infoBtn) infoBtn.addEventListener("click", function(){ showInfographic(card, payload); });
     out.querySelectorAll(".alt").forEach(function(b){
@@ -697,7 +740,7 @@
     out.querySelectorAll(".act[data-mode]").forEach(function(a){
       a.addEventListener("click", function(){
         var base = state.lastQ;
-        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:state.mainAnswer });
+        ask({ kind:"question", question:base.question, door:base.door, mode:a.dataset.mode, previous:a.dataset.mode === "simplify" ? state.mainAnswer : "" });
       });
     });
   }
