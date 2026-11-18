@@ -11,6 +11,7 @@
 //                    DAILY_GLOBAL, RANKING_SIZES, ALLOWED_HOSTS
 
 const MODEL = process.env.MODEL || "claude-haiku-5-5";
+const LONG_MODEL = process.env.LONG_MODEL || "claude-sonnet-5-5"; // writes the long Full Answer and Extended answers
 const RANKING_MODEL = process.env.RANKING_MODEL || "claude-sonnet-5-5";
 const DAILY_QUESTIONS = parseInt(process.env.DAILY_QUESTIONS || "15", 10);
 const DAILY_LISTS = parseInt(process.env.DAILY_LISTS || "3", 10);
@@ -394,7 +395,7 @@ export default async function handler(req, res) {
   if (mode === "followup" && followup.length < 2) return res.status(400).json({ error: "Please type your follow-up." });
   const keyFor = (q) => kind === "ranking"
     ? `amp:cache:v6:rank:${size}:${normalize(range)}:${normalize(q)}`
-    : `amp:cache:v6:q:${door}:${mode}:${normalize(q)}`;
+    : `amp:cache:v7:q:${door}:${mode}:${normalize(q)}`;
 
   // 1) Cached answers are instant and cost nothing (follow-ups depend on the conversation, so they're never cached)
   const cacheKey = (mode === "followup" || body.noCache) ? null : keyFor(question);
@@ -469,8 +470,8 @@ export default async function handler(req, res) {
         mode === "simplify" && prev ? `The answer already shown was:\n${prev}` : "",
       ].filter(Boolean).join("\n\n");
       text = await askClaude({
-        model: MODEL,
-        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "normal" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "normal" ? "Full Answer" : "Extended") + " answer, so the \"## \" subheadline lines in \"answer\" are REQUIRED. The door's points above become separate sections, each with its own \"## \" subheadline." : ""}`,
+        model: (mode === "normal" || mode === "extended") ? LONG_MODEL : MODEL,
+        system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MODE_GUIDE[mode]}${(mode === "normal" || mode === "extended") ? "\n" + SECTION_GUIDE[door] + "\nIMPORTANT: this is a " + (mode === "normal" ? "Full Answer" : "Extended") + " answer, so the \"## \" subheadline lines in \"answer\" are REQUIRED. The door's points above are only a starting minimum: go well beyond them and cover the topic fully. Hit the word count; a short answer is a failure." : ""}`,
         user,
         maxTokens: mode === "extended" ? 8000 : mode === "normal" ? 4800 : 2600,
         maxSearches: door === "future" ? 4 : 2,
