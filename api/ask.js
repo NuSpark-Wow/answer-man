@@ -1,3 +1,4 @@
+import lwGate from "./_lwgate.js";
 // The Answer Man (Ask Mr. Paul) — answer engine
 // Vercel serverless function. No packages needed.
 //
@@ -448,6 +449,7 @@ function parseCard(text) {
 
 // ---------- handler ----------
 export default async function handler(req, res) {
+  if (!(await lwGate(req, res, "answer-man"))) return;
   res.setHeader("Cache-Control", "no-store");
 
   if (req.method === "GET") {
