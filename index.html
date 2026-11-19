@@ -589,6 +589,44 @@
     return t.slice(0, 14000);
   }
   var MODE_LABEL = { normal:"", simplify:" · Simplified", extended:" · Extended", verify:" · Verified Report", combine:" · Combined Report" };
+  // Clean-up: remove link / citation / image code that AI tools leave in text (also fixes older saved answers)
+  function tidy(t){
+    return String(t == null ? "" : t)
+      .replace(/<\/?cite[^>]*>/gi, "")
+      .replace(/[-]*(?:cite|filecite|navlist|image_group|i)?[-]*(?:turn\d+(?:search|news|image|view|fetch|file|product|forecast|finance|sports|calc|time)\d+[-]*)+/gi, "")
+      .replace(/(?:image_group|navlist|product_carousel)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/gi, "")
+      .replace(/entity\s*\[\s*"[^"]*"\s*,\s*"([^"]*)"[^\]]*\]/gi, "$1")
+      .replace(/【[^】]*】/g, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/[-]/g, "")
+      .replace(/<[^>]{1,200}>/g, "")
+      .replace(/\(\s*\[[^\]]*\]\([^)]*\)\s*\)/g, "")
+      .replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]*\)/g, "$1")
+      .replace(/\(?\s*(?:https?:\/\/|www\.)[^\s)<>\]]+\s*\)?/gi, " ")
+      .replace(/\[\^?\d+(?:[,\s]*\^?\d+)*\]/g, "")
+      .replace(/\*\*|__|`+/g, "")
+      .replace(/^\s*#{1,6}\s+/gm, "")
+      .replace(/^\s*(?:-{3,}|\*{3,})\s*$/gm, "")
+      .replace(/\(\s*[,;]?\s*\)/g, "")
+      .replace(/\b(?:Sources?|References?)\s*:\s*(?=\n|$)/gi, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/ +([.,;:!?)])/g, "$1")
+      .replace(/[ \t]+$/gm, "")
+      .trim();
+  }
+  function tidyCard(card){
+    if (!card || card._tidy) return card;
+    card.title = tidy(card.title) || "Here's your answer";
+    if (card.question) card.question = tidy(card.question);
+    card.answer = tidy(card.answer);
+    card.sections = (card.sections || []).map(function(x){ return { heading: tidy(x.heading), text: tidy(x.text) }; }).filter(function(x){ return x.heading || x.text; });
+    card.facts = (card.facts || []).map(tidy).filter(Boolean);
+    card.items = (card.items || []).map(function(it){ var o = {}; for (var k in it) o[k] = it[k]; o.name = tidy(it.name); o.reason = tidy(it.reason); return o; }).filter(function(it){ return it.name; });
+    card.corrections = (card.corrections || []).map(tidy).filter(Boolean);
+    card.alternatives = (card.alternatives || []).map(tidy).filter(Boolean);
+    card._tidy = true;
+    return card;
+  }
   function paras(t, cls){ var h=""; String(t || "").split(/\n\s*\n/).forEach(function(p){ if (p.trim()) h += '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(p.trim()) + '</p>'; }); return h; }
   function bodyHtml(card){
     var secs = card.sections && card.sections.length;
@@ -741,6 +779,7 @@
     });
   }
   function appendFollow(card, payload){
+    card = tidyCard(card);
     var idx = follows.length;
     follows.push({ question: card.question || payload.followup, text: cardText(card), card: card, mode: "normal" });
     var thread = document.getElementById("thread");
@@ -754,6 +793,7 @@
     el.scrollIntoView({ behavior:"smooth", block:"start" });
   }
   function updateFollow(idx, card, mode){
+    card = tidyCard(card);
     var el = document.getElementById("fc-" + idx); if (!el) return;
     follows[idx].text = cardText(card); follows[idx].card = card; follows[idx].mode = mode;
     el.innerHTML = followInner(card, idx, mode);
@@ -790,6 +830,7 @@
   }
 
   function render(card, payload, cached){
+    card = tidyCard(card);
     var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size + (payload.range && payload.range !== "All time" ? " · " + payload.range : "")
               : payload.door.toUpperCase() + (MODE_LABEL[payload.mode] || "");
     var html = '<div class="card"><span class="badge">' + esc(badge) + '</span>' + (cached ? '<span class="cached">instant answer</span>' : '');
