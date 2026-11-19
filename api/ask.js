@@ -246,6 +246,47 @@ function unescapeJson(s) {
   try { return JSON.parse('"' + s + '"'); } catch { return s.replace(/\\n/g, "\n").replace(/\\"/g, '"'); }
 }
 
+// ---------- Clean-up: remove link / citation / image code that AI tools leave in text ----------
+// Removes ChatGPT's hidden citation and image tokens, cite tags, and image markdown (keeps links)
+function stripTokens(s) {
+  return String(s || "")
+    .replace(/<\/?cite[^>]*>/gi, "")
+    .replace(/[-]*(?:cite|filecite|navlist|image_group|i)?[-]*(?:turn\d+(?:search|news|image|view|fetch|file|product|forecast|finance|sports|calc|time)\d+[-]*)+/gi, "")
+    .replace(/(?:image_group|navlist|product_carousel)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/gi, "")
+    .replace(/entity\s*\[\s*"[^"]*"\s*,\s*"([^"]*)"[^\]]*\]/gi, "$1")
+    .replace(/【[^】]*】/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/[-]/g, "");
+}
+// Full clean for text shown to visitors: also turns links into plain words and drops bare URLs and markdown marks
+function cleanText(s) {
+  return stripTokens(s)
+    .replace(/<[^>]{1,200}>/g, "")
+    .replace(/\(\s*\[[^\]]*\]\([^)]*\)\s*\)/g, "")
+    .replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)]*\)/g, "$1")
+    .replace(/\(?\s*(?:https?:\/\/|www\.)[^\s)<>\]]+\s*\)?/gi, " ")
+    .replace(/\[\^?\d+(?:[,\s]*\^?\d+)*\]/g, "")
+    .replace(/\*\*|__|`+/g, "")
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/^\s*(?:-{3,}|\*{3,})\s*$/gm, "")
+    .replace(/\(\s*[,;]?\s*\)/g, "")
+    .replace(/\b(?:Sources?|References?)\s*:\s*(?=\n|$)/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.,;:!?)])/g, "$1")
+    .replace(/[ \t]+$/gm, "")
+    .trim();
+}
+function cleanCard(card) {
+  card.title = cleanText(card.title) || "Here's your answer";
+  card.question = cleanText(card.question);
+  card.answer = cleanText(card.answer);
+  card.facts = card.facts.map(cleanText).filter(Boolean);
+  card.sections = card.sections.map((x) => ({ heading: cleanText(x.heading), text: cleanText(x.text) })).filter((x) => x.heading || x.text);
+  card.items = card.items.map((i) => ({ ...i, name: cleanText(i.name), reason: cleanText(i.reason) })).filter((i) => i.name);
+  card.alternatives = (card.alternatives || []).map(cleanText).filter(Boolean);
+  return card;
+}
+
 // Pull readable parts out of a reply that isn't clean JSON (for example, cut off mid-way)
 function salvage(text) {
   const str = (key) => {
@@ -340,7 +381,7 @@ async function addHeadings(card) {
     const m = reply.match(/\{[\s\S]*\}/);
     const heads = m ? JSON.parse(m[0]).headings : null;
     if (!Array.isArray(heads) || !heads.length) return;
-    card.sections = paras.slice(1).map((p, i) => ({ heading: String(heads[i] || "").replace(/^#+\s*/, "").slice(0, 120), text: p }));
+    card.sections = paras.slice(1).map((p, i) => ({ heading: cleanText(String(heads[i] || "")).slice(0, 120), text: p }));
     card.answer = paras[0];
   } catch { /* keep the answer as it is */ }
 }
@@ -402,7 +443,7 @@ function parseCard(text) {
   card.alternatives = Array.isArray(card.alternatives)
     ? card.alternatives.map((x) => String(x).trim()).filter((x) => x.length > 2).slice(0, 3)
     : [];
-  return card;
+  return cleanCard(card);
 }
 
 // ---------- handler ----------
@@ -488,7 +529,7 @@ export default async function handler(req, res) {
       if (!prev) return res.status(400).json({ error: "Please get an answer first, then tap Verified Report." });
       const review = await askChatGPT(CHECK_PROMPT(question, prev));
       checkedBy = review ? "Claude and ChatGPT" : "Claude";
-      const reviewText = review || "(No outside review was available. Check the article yourself with web search, then write the final version.)";
+      const reviewText = (review && stripTokens(review)) ||"(No outside review was available. Check the article yourself with web search, then write the final version.)";
       text = await askClaude({
         model: LONG_MODEL,
         system: `${BASE_RULES}\n\n${DOOR_GUIDE[door]}\n${MERGE_RULES}`,
@@ -498,7 +539,7 @@ export default async function handler(req, res) {
       });
     } else if (mode === "combine") {
       // Second opinion: the person pasted another AI tool's response; combine both into one final report
-      const second = String(body.review || "").slice(0, 20000).trim();
+      const second = stripTokens(String(body.review || "").slice(0, 20000)).trim();
       if (!prev) return res.status(400).json({ error: "Please get an answer first." });
       if (second.length < 40) return res.status(400).json({ error: "Please paste the other AI's response first." });
       checkedBy = "Claude and another AI";
@@ -549,7 +590,7 @@ export default async function handler(req, res) {
     if (mode === "verify" || mode === "combine") {
       let raw = {};
       try { const a = text.indexOf("{"), b = text.lastIndexOf("}"); raw = JSON.parse(text.slice(a, b + 1)); } catch { raw = {}; }
-      card.corrections = Array.isArray(raw.corrections) ? raw.corrections.map(String).filter(Boolean).slice(0, 12) : [];
+      card.corrections = Array.isArray(raw.corrections) ? raw.corrections.map(cleanText).filter(Boolean).slice(0, 12) : [];
       card.sources = Array.isArray(raw.sources) ? raw.sources.filter((x) => x && /^https?:\/\//.test(String(x.url || ""))).map((x) => ({ title: String(x.title || x.url).slice(0, 140), url: String(x.url).replace(/[?&]utm_source=[^&]*/, "") })).slice(0, 10) : [];
       card.checkedBy = checkedBy;
     }
