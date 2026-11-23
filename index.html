@@ -252,6 +252,10 @@
   .follow-label{font-size:13px;color:var(--cream-dim);margin-top:18px}
   .notice.small{margin-top:14px;font-size:15px}
   .alts{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .nextq{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .nextq span{font-size:13px;color:var(--cream-dim);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .amap{margin-top:12px;background:rgba(247,236,210,.06);border:1px solid rgba(247,236,210,.25);border-radius:12px;padding:8px}
+  .amap svg{width:100%;height:auto;display:block}
   .alts span{font-size:13px;color:var(--cream-dim);font-style:italic}
   .alt{font:500 13px 'Inter';background:rgba(247,236,210,.12);color:var(--cream);border:1px solid rgba(247,236,210,.4);padding:6px 12px;border-radius:999px;cursor:pointer}
   .alt:hover{background:rgba(247,236,210,.24)}
@@ -848,6 +852,7 @@
       html += sizeButtons(mode, "data-fmode");
       html += '<button class="act print copy" type="button">Copy for AI</button>';
       html += '<button class="act print" type="button">Print / Save PDF</button>';
+      if (card.sections && card.sections.filter(function(x){ return x.heading; }).length >= 2) html += '<button class="act map" type="button">🗺 Answer Map</button>';
     }
     html += '<button class="act new">New Question</button></div>';
     return html;
@@ -914,6 +919,31 @@
     document.getElementById(state.tab === "ranking" ? "rInput" : "qInput").focus({ preventScroll:true });
   }
 
+  // Answer Map: a one-picture mind map of the answer's subheadlines, for visual learners (drawn right here, no extra cost).
+  function toggleMap(card, btn){
+    var box = document.getElementById("mapBox");
+    if (box.innerHTML){ box.innerHTML = ""; btn.textContent = "🗺 Answer Map"; return; }
+    var heads = card.sections.filter(function(x){ return x.heading; }).slice(0, 8);
+    var W = 800, H = 460, cx = 400, cy = 230, rx = 300, ry = 165;
+    function wrap(t, n){ var w = String(t).split(/\s+/), lines = [], cur = ""; w.forEach(function(x){ if ((cur + " " + x).trim().length > n && cur){ lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); }); if (cur) lines.push(cur); return lines.slice(0, 3); }
+    function txt(lines, x, y, size, color, weight){ var off = -(lines.length - 1) * size * 0.6; return lines.map(function(l, i){ return '<text x="' + x + '" y="' + (y + off + i * size * 1.2 + size * 0.35) + '" text-anchor="middle" font-family="Inter,Arial" font-size="' + size + '" font-weight="' + weight + '" fill="' + color + '">' + esc(l) + '</text>'; }).join(""); }
+    var g = "";
+    heads.forEach(function(h, i){
+      var a = -Math.PI / 2 + i * 2 * Math.PI / heads.length, x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * ry;
+      g += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke="#c9a54a" stroke-width="2.5" stroke-linecap="round"/>';
+    });
+    heads.forEach(function(h, i){
+      var a = -Math.PI / 2 + i * 2 * Math.PI / heads.length, x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * ry;
+      var lines = wrap(h.heading, 16), bw = 170, bh = 26 + lines.length * 18;
+      g += '<rect x="' + (x - bw / 2) + '" y="' + (y - bh / 2) + '" width="' + bw + '" height="' + bh + '" rx="12" fill="#2b2418" stroke="#e8c76a" stroke-width="2"/>';
+      g += txt(lines, x, y, 15, "#f7ecd2", 700);
+    });
+    var tl = wrap(card.title, 18), tb = 40 + tl.length * 22;
+    g += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="120" ry="' + Math.max(48, tb / 2 + 8) + '" fill="#c9a54a" stroke="#f3d98a" stroke-width="3"/>';
+    g += txt(tl, cx, cy, 18, "#1c160c", 800);
+    box.innerHTML = '<div class="amap"><svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Answer map">' + g + '</svg></div>';
+    btn.textContent = "✕ Hide Answer Map";
+  }
   function render(card, payload, cached){
     card = tidyCard(card);
     var badge = payload.kind === "ranking" ? "Ranking Research · " + payload.size + (payload.range && payload.range !== "All time" ? " · " + payload.range : "")
@@ -932,11 +962,15 @@
       if (payload.mode !== "simplify") { html += '<button class="act second" type="button">Gain Another Perspective</button>'; state.showHint = true; }
       else { html += '<button class="act print copy" type="button">Copy for AI</button>'; state.showHint = false; }
       html += '<button class="act print" type="button">Print / Save PDF</button>';
+      if (card.sections && card.sections.filter(function(x){ return x.heading; }).length >= 2) html += '<button class="act map" type="button">🗺 Answer Map</button>';
     }
     var canInfo = payload.kind === "ranking" && payload.size === 25 && card.type === "list" && card.items && card.items.length >= 9;
     if (canInfo) html += '<button class="act info" type="button">Create Infographic Prompt</button>';
     html += '<button class="act new">' + (payload.kind === "ranking" ? "New List" : "New Question") + '</button>';
-    html += '</div><div id="igBox"></div>';
+    html += '</div><div id="mapBox"></div><div id="igBox"></div>';
+    if (payload.kind === "question" && card.type !== "redirect" && card.next_questions && card.next_questions.length){
+      html += '<div class="nextq"><span>Keep exploring:</span>' + card.next_questions.map(function(a){ return '<button class="alt nq" type="button">' + esc(a) + '</button>'; }).join("") + '</div>';
+    }
     if (card.explore && EXPLORE_LINKS[card.explore]){
       html += '<div class="explore">Want more? Try <a href="' + EXPLORE_LINKS[card.explore] + '" target="_top">' + esc(card.explore) + ' →</a></div>';
     }
@@ -966,6 +1000,14 @@
     if (secondBtn){ var hint = document.createElement("p"); hint.className = "persp-hint"; hint.innerHTML = '<b>Gain Another Perspective:</b> copy our answer into your favorite AI tool (ChatGPT, Gemini, or another), then paste its response back here. Mr. Paul blends the best of both into one report.'; out.querySelector(".card > .actions").after(hint); }
     if (secondBtn) secondBtn.addEventListener("click", function(){ openSecond(card, payload); });
     if (printBtn) printBtn.addEventListener("click", function(){ printCard(card, payload.door, payload.mode || "normal"); });
+    var mapBtn = out.querySelector(".act.map");
+    if (mapBtn) mapBtn.addEventListener("click", function(){ toggleMap(card, mapBtn); });
+    out.querySelectorAll(".alt.nq").forEach(function(b){
+      b.addEventListener("click", function(){
+        var q = b.textContent; document.getElementById("qInput").value = q;
+        ask({ kind:"question", question:q, door:(state.lastQ && state.lastQ.door) || state.door, mode:"normal" });
+      });
+    });
     var infoBtn = out.querySelector(".act.info");
     if (infoBtn) infoBtn.addEventListener("click", function(){ showInfographic(card, payload); });
     out.querySelectorAll(".alt").forEach(function(b){

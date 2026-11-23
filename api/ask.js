@@ -63,6 +63,7 @@ Reply with ONLY one JSON object, nothing before or after it:
   "facts": ["short highlight or interesting fact — how many depends on the length asked for"] ,
   "items": [{"name": "...", "reason": "one line"}],
   "alternatives": ["up to 3 other meanings as full questions, only when the question is truly unclear; otherwise empty"],
+  "next_questions": ["exactly 3 short, natural next questions a curious person would ask after this answer (each under 12 words, knowledge questions only); empty for redirects"],
   "explore": "one name from this list that fits the question best, or empty string: ${EXPERIENCES.join(" | ")}"
 }
 SUBHEADLINES (Full Answer and Extended): inside "answer", start with a 2-sentence opening paragraph, then write each section as its own line "## Subheadline" followed by that section's paragraphs, all separated by \\n\\n. Example: "Opening sentence one. Opening sentence two.\\n\\n## How It Works\\n\\nParagraph...\\n\\n## Why It Matters\\n\\nParagraph..." Summary and Simplify answers have no subheadlines.
@@ -285,6 +286,7 @@ function cleanCard(card) {
   card.sections = card.sections.map((x) => ({ heading: cleanText(x.heading), text: cleanText(x.text) })).filter((x) => x.heading || x.text);
   card.items = card.items.map((i) => ({ ...i, name: cleanText(i.name), reason: cleanText(i.reason) })).filter((i) => i.name);
   card.alternatives = (card.alternatives || []).map(cleanText).filter(Boolean);
+  card.next_questions = (card.next_questions || []).map(cleanText).filter(Boolean);
   return card;
 }
 
@@ -443,6 +445,9 @@ function parseCard(text) {
   card.explore = EXPERIENCES.includes(card.explore) ? card.explore : "";
   card.alternatives = Array.isArray(card.alternatives)
     ? card.alternatives.map((x) => String(x).trim()).filter((x) => x.length > 2).slice(0, 3)
+    : [];
+  card.next_questions = Array.isArray(card.next_questions)
+    ? card.next_questions.map((x) => String(x).trim()).filter((x) => x.length > 3 && x.length < 140).slice(0, 3)
     : [];
   return cleanCard(card);
 }
