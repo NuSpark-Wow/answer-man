@@ -751,12 +751,12 @@
     box = document.createElement("div"); box.className = "second-box";
     box.innerHTML = '<h4>Gain Another Perspective</h4>' +
       '<p>Every AI has its own strengths. Bring in another one, and Mr. Paul will blend the best of both into one complete report.</p>' +
-      '<ol><li><b>Copy our answer:</b> tap the <b>Copy for AI</b> button below.</li>' +
+      '<ol><li><b>Copy our answer:</b> tap the <b>Copy Our Answer</b> button below.</li>' +
       '<li><b>Paste it into another AI:</b> open ChatGPT, Gemini, or any AI tool you like, paste it in the message box, and send it.</li>' +
       '<li><b>Copy its response:</b> when it finishes, use that AI\'s copy button (or select all of its response and copy).</li>' +
       '<li><b>Paste it here:</b> tap <b>Paste</b> below, or tap inside the box and paste (on a phone, press and hold, then Paste; on a computer, Ctrl+V or Cmd+V).</li>' +
       '<li>Tap <b>Blend into one report</b>.</li></ol>' +
-      '<div class="row"><button class="act print copy2" type="button">Copy for AI</button></div>' +
+      '<div class="row"><button class="act print copy2" type="button">Copy Our Answer</button></div>' +
       '<label for="secondText">Paste the other AI\'s response here</label><textarea id="secondText" maxlength="20000"></textarea>' +
       '<div class="row"><button class="act print paste2" type="button">Paste</button><button class="act combine" type="button">Blend into one report</button><button class="act print cancel2" type="button">Close</button></div><div class="err" id="secondErr"></div>';
     var hintEl = cardEl.querySelector(".persp-hint"); if (hintEl) hintEl.style.display = "none";
@@ -929,8 +929,8 @@
     html += '<div class="actions">';
     if (payload.kind === "question" && card.type !== "redirect"){
       html += sizeButtons(payload.mode || "normal", "data-mode");
-      html += '<button class="act print copy" type="button">Copy for AI</button>';
-      if (payload.mode !== "simplify") { html += '<button class="act second" type="button">Gain Another Perspective</button>'; state.showHint = true; } else state.showHint = false;
+      if (payload.mode !== "simplify") { html += '<button class="act second" type="button">Gain Another Perspective</button>'; state.showHint = true; }
+      else { html += '<button class="act print copy" type="button">Copy for AI</button>'; state.showHint = false; }
       html += '<button class="act print" type="button">Print / Save PDF</button>';
     }
     var canInfo = payload.kind === "ranking" && payload.size === 25 && card.type === "list" && card.items && card.items.length >= 9;
